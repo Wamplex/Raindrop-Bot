@@ -13,7 +13,6 @@ dp = Dispatcher(storage=MemoryStorage())
 waiting_users = {}
 deal_timers = {}
 user_stats = {}
-
 banned_users = set()
 
 main_keyboard = ReplyKeyboardMarkup(
@@ -40,10 +39,7 @@ async def start_handler(message: Message):
     if user_id in ADMIN_IDS:
         keyboard.keyboard.append([KeyboardButton(text="📋 Активные сделки")])
 
-    await message.answer(
-        "😊 Привет! Я — надёжный гарант для сделок.",
-        reply_markup=keyboard
-    )
+    await message.answer("😊 Привет! Я — надёжный гарант для сделок.", reply_markup=keyboard)
 
 @dp.message(F.text == "✅ Сделка")
 async def start_deal(message: Message):
@@ -53,7 +49,7 @@ async def start_deal(message: Message):
         await message.answer("🚫 Вы заблокированы.")
         return
     if user_id in waiting_users:
-        await message.answer("🔄 Вы уже начали сделку.", reply_markup=cancel_keyboard)
+        await message.answer("🔄 У вас уже есть активная сделка.", reply_markup=cancel_keyboard)
         return
 
     waiting_users[user_id] = {
@@ -61,6 +57,7 @@ async def start_deal(message: Message):
         "status": "📝 Ожидает подтверждения",
         "created": datetime.utcnow()
     }
+
     await message.answer("📝 Опишите суть сделки и укажите второго участника.", reply_markup=cancel_keyboard)
 
     for admin in ADMIN_IDS:
@@ -93,12 +90,9 @@ async def show_profile(message: Message):
     stats = user_stats.get(user_id, {"success": 0, "cancelled": 0})
 
     profile_text = (
-        f"👤 Профиль: @{username} ({user_id})
-"
-        f"📈 Успешных сделок: {stats['success']}
-"
-        f"❌ Отменённых: {stats['cancelled']}
-"
+        f"👤 Профиль: @{username} ({user_id})\n"
+        f"📈 Успешных сделок: {stats['success']}\n"
+        f"❌ Отменённых: {stats['cancelled']}"
     )
     await message.answer(profile_text, reply_markup=main_keyboard)
 
@@ -117,11 +111,9 @@ async def list_deals(message: Message):
     if not waiting_users:
         await message.answer("🗂 Активных сделок нет.")
         return
-    text = "📋 Активные сделки:
-"
+    text = "📋 Активные сделки:\n"
     for uid, info in waiting_users.items():
-        text += f"👤 @{info['username']} ({uid}) — {info['status']}
-"
+        text += f"👤 @{info['username']} ({uid}) — {info['status']}\n"
     await message.answer(text)
 
 @dp.message()
