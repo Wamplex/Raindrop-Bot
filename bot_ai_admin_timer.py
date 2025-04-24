@@ -1,5 +1,5 @@
 from aiogram import Bot, Dispatcher, types, F
-from aiogram.types import Message, ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton
+from aiogram.types import Message, ReplyKeyboardMarkup, KeyboardButton
 from aiogram.fsm.storage.memory import MemoryStorage
 import asyncio
 from datetime import datetime
@@ -10,13 +10,12 @@ ADMIN_IDS = [7620745738]
 bot = Bot(token=TOKEN)
 dp = Dispatcher(storage=MemoryStorage())
 
-waiting_users = {}     # user_id: {username, status, created}
-confirmed_users = set()
-banned_users = set()
+waiting_users = {}
 deal_timers = {}
 user_stats = {}
 
-# Кнопки
+banned_users = set()
+
 main_keyboard = ReplyKeyboardMarkup(
     keyboard=[
         [KeyboardButton(text="✅ Сделка"), KeyboardButton(text="📊 Профиль")],
@@ -42,9 +41,7 @@ async def start_handler(message: Message):
         keyboard.keyboard.append([KeyboardButton(text="📋 Активные сделки")])
 
     await message.answer(
-        "👋 Привет! Я — Raindrop Гарант Бот PRO.
-
-Выберите действие ниже 👇",
+        "😊 Привет! Я — надёжный гарант для сделок.",
         reply_markup=keyboard
     )
 
@@ -84,6 +81,7 @@ async def cancel_deal(message: Message):
         waiting_users.pop(user_id)
         if user_id in deal_timers:
             deal_timers[user_id].cancel()
+            del deal_timers[user_id]
         await message.answer("❌ Сделка отменена.", reply_markup=main_keyboard)
     else:
         await message.answer("ℹ️ У вас нет активной сделки.", reply_markup=main_keyboard)
