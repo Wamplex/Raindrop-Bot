@@ -4,11 +4,10 @@ from aiogram.fsm.storage.memory import MemoryStorage
 import asyncio
 from datetime import datetime
 
-# === Токен и ID админов ===
+# === Настройки ===
 TOKEN = "7807213915:AAGtoLBhhKihds0Y-YGwfBFZiCAZvx-P76Y"
-ADMIN_IDS = [7620745738]  # добавь нужные ID
+ADMIN_IDS = [7620745738]
 
-# === Инициализация бота ===
 bot = Bot(token=TOKEN)
 dp = Dispatcher(storage=MemoryStorage())
 
@@ -157,4 +156,46 @@ async def unban_user_prompt(message: Message):
 
 @dp.message(F.text == "📢 Рассылка")
 async def broadcast_prompt(message: Message):
-    if message.from
+    if message.from_user.id in ADMIN_IDS:
+        await message.answer("✏️ Введите сообщение для рассылки:")
+        awaiting_action[message.from_user.id] = "broadcast"
+
+@dp.message(F.text == "🔙 Назад")
+async def back(message: Message):
+    await message.answer("↩️ Возвращаемся в главное меню.", reply_markup=get_main_keyboard(message.from_user.id))
+
+@dp.message()
+async def handle_admin_input(message: Message):
+    user_id = message.from_user.id
+    if user_id in awaiting_action:
+        action = awaiting_action.pop(user_id)
+        if action == "ban":
+            try:
+                banned_users.add(int(message.text))
+                await message.answer(f"✅ Пользователь {message.text} забанен.")
+            except:
+                await message.answer("❌ Ошибка: неправильный ID.")
+        elif action == "unban":
+            try:
+                banned_users.discard(int(message.text))
+                await message.answer(f"✅ Пользователь {message.text} разбанен.")
+            except:
+                await message.answer("❌ Ошибка: неправильный ID.")
+        elif action == "broadcast":
+            sent = 0
+            for uid in all_users:
+                try:
+                    await bot.send_message(uid, message.text)
+                    sent += 1
+                except:
+                    pass
+            await message.answer(f"📬 Сообщение отправлено {sent} пользователям.")
+
+# === Запуск ===
+async def main():
+    print("🚀 Бот запущен!")
+    await bot.delete_webhook(drop_pending_updates=True)
+    await dp.start_polling(bot)
+
+if __name__ == "__main__":
+    asyncio.run(main())
