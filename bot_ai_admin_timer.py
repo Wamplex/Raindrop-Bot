@@ -1,5 +1,5 @@
 # telegram_shop_bot.py
-# Telegram-бот с SQLite, товарами, фильтрами, заявками, админкой
+# Telegram-бот с SQLite, товарами, фильтрами, заявками, админкой + редактирование товаров
 
 import asyncio
 import sqlite3
@@ -17,7 +17,6 @@ dp = Dispatcher(storage=MemoryStorage())
 conn = sqlite3.connect("shop.db")
 c = conn.cursor()
 
-# Таблицы
 c.execute("""
 CREATE TABLE IF NOT EXISTS products (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -29,6 +28,7 @@ CREATE TABLE IF NOT EXISTS products (
     mutations TEXT
 )
 """)
+
 c.execute("""
 CREATE TABLE IF NOT EXISTS orders (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -40,6 +40,7 @@ CREATE TABLE IF NOT EXISTS orders (
     time TEXT
 )
 """)
+
 conn.commit()
 
 main_menu = ReplyKeyboardMarkup(
@@ -84,12 +85,14 @@ async def show_product(callback: types.CallbackQuery):
         await callback.message.edit_text("Товар не найден.")
         return
     name, price, qty, mutations = product
-    kb = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="💳 Купить", callback_data=f"buy_{pid}"),
-         InlineKeyboardButton(text="🔁 Обмен", callback_data=f"exchange_{pid}")],
-    ])
+    is_admin = callback.from_user.id == ADMIN_ID
+    kb = [[InlineKeyboardButton(text="💳 Купить", callback_data=f"buy_{pid}"),
+           InlineKeyboardButton(text="🔁 Обмен", callback_data=f"exchange_{pid}")]]
+    if is_admin:
+        kb.append([InlineKeyboardButton(text="✏️ Изменить", callback_data=f"edit_{pid}"),
+                   InlineKeyboardButton(text="❌ Удалить", callback_data=f"delete_{pid}")])
     text = f"{name}\nЦена: {price}₽\nОсталось: {qty}\nМутации: {mutations}"
-    await callback.message.edit_text(text, reply_markup=kb)
+    await callback.message.edit_text(text, reply_markup=InlineKeyboardMarkup(inline_keyboard=kb))
 
 @dp.callback_query(F.data.startswith("buy_"))
 @dp.callback_query(F.data.startswith("exchange_"))
@@ -110,6 +113,29 @@ async def handle_order(callback: types.CallbackQuery):
     conn.commit()
     await bot.send_message(ADMIN_ID, f"📩 Запрос от @{username} на {action} товара {name}")
     await callback.message.answer("⌛️ Запрос отправлен. Ожидайте ответа от администрации.")
+
+@dp.callback_query(F.data.startswith("delete_"))
+async def delete_product(callback: types.CallbackQuery):
+    pid = int(callback.data.split("_")[1])
+    c.execute("DELETE FROM products WHERE id=?", (pid,))
+    conn.commit()
+    await callback.message.edit_text("❌ Товар удалён.")
+
+@dp.callback_query(F.data.startswith("edit_"))
+async def edit_product(callback: types.CallbackQuery):
+    pid = int(callback.data.split("_")[1])
+    await callback.message.answer(f"✏️ Напиши новую цену для товара #{pid}:")
+
+    @dp.message()
+    async def set_new_price(message: Message):
+        try:
+            new_price = int(message.text)
+            c.execute("UPDATE products SET price=? WHERE id=?", (new_price, pid))
+            conn.commit()
+            await message.answer("✅ Цена обновлена.")
+        except:
+            await message.answer("⚠️ Введите число.")
+        dp.message_handlers.unregister(set_new_price)
 
 @dp.message(F.text == "👤 Личный кабинет")
 async def show_profile(message: Message):
@@ -143,3 +169,4 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
+
