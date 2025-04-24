@@ -4,9 +4,11 @@ from aiogram.fsm.storage.memory import MemoryStorage
 import asyncio
 from datetime import datetime
 
-TOKEN = "7807213915:AAGtoLBhhKihds0Y-YGwfBFZiCAZvx-P76Y"
-ADMIN_IDS = [7620745738]
+# === Токен и ID админов ===
+TOKEN = "YOUR_BOT_TOKEN"
+ADMIN_IDS = [123456789]  # замените на реальные ID админов
 
+# === Инициализация бота ===
 bot = Bot(token=TOKEN)
 dp = Dispatcher(storage=MemoryStorage())
 
@@ -15,9 +17,9 @@ deal_timers = {}
 user_stats = {}
 banned_users = set()
 all_users = set()
-awaiting_broadcast = {}
+awaiting_action = {}
 
-# Клавиатуры
+# === Клавиатуры ===
 def get_main_keyboard(user_id):
     keyboard = [
         [KeyboardButton(text="✅ Сделка"), KeyboardButton(text="📊 Профиль")],
@@ -41,7 +43,7 @@ cancel_keyboard = ReplyKeyboardMarkup(
     resize_keyboard=True
 )
 
-# /start
+# === Обработчики ===
 @dp.message(F.text == "/start")
 async def start_handler(message: Message):
     user_id = message.from_user.id
@@ -51,7 +53,6 @@ async def start_handler(message: Message):
         return
     await message.answer("😊 Привет! Я — надёжный гарант для сделок.", reply_markup=get_main_keyboard(user_id))
 
-# Основные команды
 @dp.message(F.text == "✅ Сделка")
 async def start_deal(message: Message):
     user_id = message.from_user.id
@@ -108,13 +109,13 @@ async def show_profile(message: Message):
 
 @dp.message(F.text == "💬 Отзывы")
 async def reviews(message: Message):
-    await message.answer("💬 Канал с отзывами: https://t.me/raindrop_reviews")
+    await message.answer("💬 Канал с отзывами: https://t.me/your_review_channel")
 
 @dp.message(F.text == "🛠 Поддержка")
 async def support(message: Message):
     await message.answer("📨 Напишите сюда ваш вопрос. Админ скоро ответит.")
 
-# Админ-панель
+# === Админ-панель ===
 @dp.message(F.text == "🛠 Админ-панель")
 async def admin_panel(message: Message):
     if message.from_user.id in ADMIN_IDS:
@@ -133,70 +134,4 @@ async def list_deals(message: Message):
     await message.answer(text)
 
 @dp.message(F.text == "📊 Статистика")
-async def stats(message: Message):
-    if message.from_user.id not in ADMIN_IDS:
-        return
-    await message.answer(
-        f"👥 Пользователей: {len(all_users)}\n"
-        f"🔐 Заблокировано: {len(banned_users)}\n"
-        f"📋 Активные сделки: {len(waiting_users)}"
-    )
-
-@dp.message(F.text == "🚫 Забанить")
-async def ban_user_prompt(message: Message):
-    if message.from_user.id in ADMIN_IDS:
-        await message.answer("✏️ Введите ID пользователя для бана:")
-        awaiting_broadcast[message.from_user.id] = "ban"
-
-@dp.message(F.text == "✅ Разбанить")
-async def unban_user_prompt(message: Message):
-    if message.from_user.id in ADMIN_IDS:
-        await message.answer("✏️ Введите ID пользователя для разбана:")
-        awaiting_broadcast[message.from_user.id] = "unban"
-
-@dp.message(F.text == "📢 Рассылка")
-async def broadcast_prompt(message: Message):
-    if message.from_user.id in ADMIN_IDS:
-        await message.answer("✏️ Введите сообщение для рассылки:")
-        awaiting_broadcast[message.from_user.id] = "broadcast"
-
-@dp.message(F.text == "🔙 Назад")
-async def back(message: Message):
-    await message.answer("↩️ Возвращаемся в главное меню.", reply_markup=get_main_keyboard(message.from_user.id))
-
-@dp.message()
-async def handle_dynamic_admin_input(message: Message):
-    user_id = message.from_user.id
-    if user_id in awaiting_broadcast:
-        action = awaiting_broadcast.pop(user_id)
-        if action == "ban":
-            try:
-                target_id = int(message.text.strip())
-                banned_users.add(target_id)
-                await message.answer(f"✅ Пользователь {target_id} забанен.")
-            except:
-                await message.answer("❌ Ошибка: неправильный ID.")
-        elif action == "unban":
-            try:
-                target_id = int(message.text.strip())
-                banned_users.discard(target_id)
-                await message.answer(f"✅ Пользователь {target_id} разбанен.")
-            except:
-                await message.answer("❌ Ошибка: неправильный ID.")
-        elif action == "broadcast":
-            sent = 0
-            for uid in all_users:
-                try:
-                    await bot.send_message(uid, message.text)
-                    sent += 1
-                except:
-                    pass
-            await message.answer(f"📬 Сообщение отправлено {sent} пользователям.")
-
-async def main():
-    print("🚀 Бот с админ-панелью запущен!")
-    await bot.delete_webhook(drop_pending_updates=True)
-    await dp.start_polling(bot)
-
-if __name__ == "__main__":
-    asyncio.run(main())
+async def stats
