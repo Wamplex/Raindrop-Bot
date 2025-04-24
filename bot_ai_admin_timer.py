@@ -100,10 +100,8 @@ async def show_profile(message: Message):
     username = message.from_user.username or "без username"
     stats = user_stats.get(user_id, {"success": 0, "cancelled": 0})
     await message.answer(
-        f"👤 Профиль: @{username} ({user_id})
-"
-        f"📈 Успешных сделок: {stats['success']}
-"
+        f"👤 Профиль: @{username} ({user_id})\n"
+        f"📈 Успешных сделок: {stats['success']}\n"
         f"❌ Отменённых: {stats['cancelled']}",
         reply_markup=get_main_keyboard(user_id)
     )
@@ -129,11 +127,9 @@ async def list_deals(message: Message):
     if not waiting_users:
         await message.answer("🗂 Активных сделок нет.")
         return
-    text = "📋 Активные сделки:
-"
+    text = "📋 Активные сделки:\n"
     for uid, info in waiting_users.items():
-        text += f"👤 @{info['username']} ({uid}) — {info['status']}
-"
+        text += f"👤 @{info['username']} ({uid}) — {info['status']}\n"
     await message.answer(text)
 
 @dp.message(F.text == "📊 Статистика")
@@ -141,10 +137,8 @@ async def stats(message: Message):
     if message.from_user.id not in ADMIN_IDS:
         return
     await message.answer(
-        f"👥 Пользователей: {len(all_users)}
-"
-        f"🔐 Заблокировано: {len(banned_users)}
-"
+        f"👥 Пользователей: {len(all_users)}\n"
+        f"🔐 Заблокировано: {len(banned_users)}\n"
         f"📋 Активные сделки: {len(waiting_users)}"
     )
 
@@ -152,7 +146,6 @@ async def stats(message: Message):
 async def ban_user_prompt(message: Message):
     if message.from_user.id in ADMIN_IDS:
         await message.answer("✏️ Введите ID пользователя для бана:")
-
         awaiting_broadcast[message.from_user.id] = "ban"
 
 @dp.message(F.text == "✅ Разбанить")
