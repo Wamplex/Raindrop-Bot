@@ -5,8 +5,8 @@ import asyncio
 from datetime import datetime
 
 # === Токен и ID админов ===
-TOKEN = "YOUR_BOT_TOKEN"
-ADMIN_IDS = [123456789]  # замените на реальные ID админов
+TOKEN = "7807213915:AAGtoLBhhKihds0Y-YGwfBFZiCAZvx-P76Y"
+ADMIN_IDS = [7620745738]  # добавь нужные ID
 
 # === Инициализация бота ===
 bot = Bot(token=TOKEN)
@@ -43,7 +43,7 @@ cancel_keyboard = ReplyKeyboardMarkup(
     resize_keyboard=True
 )
 
-# === Обработчики ===
+# === Команды пользователей ===
 @dp.message(F.text == "/start")
 async def start_handler(message: Message):
     user_id = message.from_user.id
@@ -109,7 +109,7 @@ async def show_profile(message: Message):
 
 @dp.message(F.text == "💬 Отзывы")
 async def reviews(message: Message):
-    await message.answer("💬 Канал с отзывами: https://t.me/your_review_channel")
+    await message.answer("💬 Канал с отзывами: https://t.me/raindrop_reviews")
 
 @dp.message(F.text == "🛠 Поддержка")
 async def support(message: Message):
@@ -134,4 +134,27 @@ async def list_deals(message: Message):
     await message.answer(text)
 
 @dp.message(F.text == "📊 Статистика")
-async def stats
+async def stats(message: Message):
+    if message.from_user.id not in ADMIN_IDS:
+        return
+    await message.answer(
+        f"👥 Пользователей: {len(all_users)}\n"
+        f"🔐 Заблокировано: {len(banned_users)}\n"
+        f"📋 Активные сделки: {len(waiting_users)}"
+    )
+
+@dp.message(F.text == "🚫 Забанить")
+async def ban_user_prompt(message: Message):
+    if message.from_user.id in ADMIN_IDS:
+        await message.answer("✏️ Введите ID пользователя для бана:")
+        awaiting_action[message.from_user.id] = "ban"
+
+@dp.message(F.text == "✅ Разбанить")
+async def unban_user_prompt(message: Message):
+    if message.from_user.id in ADMIN_IDS:
+        await message.answer("✏️ Введите ID пользователя для разбана:")
+        awaiting_action[message.from_user.id] = "unban"
+
+@dp.message(F.text == "📢 Рассылка")
+async def broadcast_prompt(message: Message):
+    if message.from
