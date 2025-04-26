@@ -1,109 +1,121 @@
-# ------------------------------
-# Импорты
-# ------------------------------
 import asyncio
 import sqlite3
-from aiogram import Bot, Dispatcher, types
+from aiogram import Bot, Dispatcher, types, F
+from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 from aiogram.filters import Command
-from aiogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
-from datetime import datetime
 
-# ------------------------------
 # Настройки
-# ------------------------------
-TOKEN = "7807213915:AAGtoLBhhKihds0Y-YGwFBFZiCAZvx-P76Y"
+TOKEN = "7807213915:AAGtoLBhhKihds0Y-YGwfBFZiCAZvx-P76Y"
 ADMIN_ID = 7620745738
 DB_FILE = "shop.db"
 
-bot = Bot(token=TOKEN)
+bot = Bot(token=TOKEN, parse_mode="HTML")
 dp = Dispatcher()
 
-# ------------------------------
-# Клавиатуры
-# ------------------------------
+# База данных
+conn = sqlite3.connect(DB_FILE)
+cursor = conn.cursor()
+cursor.execute('''CREATE TABLE IF NOT EXISTS products (id INTEGER PRIMARY KEY, name TEXT, category TEXT, mutation TEXT, price INTEGER, quantity INTEGER)''')
+cursor.execute('''CREATE TABLE IF NOT EXISTS orders (id INTEGER PRIMARY KEY, user_id INTEGER, username TEXT, item_name TEXT, action TEXT, timestamp TEXT)''')
+conn.commit()
+
+# Главное меню
 main_menu = InlineKeyboardMarkup(inline_keyboard=[
     [InlineKeyboardButton(text="🐠 Товары", callback_data="products")],
     [InlineKeyboardButton(text="💬 Отзывы", url="https://t.me/raindrop_reviews")],
-    [InlineKeyboardButton(text="🔧 Поддержка", callback_data="support")],
+    [InlineKeyboardButton(text="🛠 Поддержка", callback_data="support")],
     [InlineKeyboardButton(text="👤 Личный кабинет", callback_data="profile")],
 ])
 
-products_menu = InlineKeyboardMarkup(inline_keyboard=[
-    [InlineKeyboardButton(text="🎯 Fisch", callback_data="category_fish")],
-    [InlineKeyboardButton(text="🍇 Bloxfruit", callback_data="category_bloxfruit")]
+# Категории товаров
+category_menu = InlineKeyboardMarkup(inline_keyboard=[
+    [InlineKeyboardButton(text="🎣 Fisch", callback_data="category_Fisch")],
+    [InlineKeyboardButton(text="🍇 Bloxfruit", callback_data="category_Bloxfruit")]
 ])
 
-admin_panel = InlineKeyboardMarkup(inline_keyboard=[
-    [InlineKeyboardButton(text="⚒️ Админ-панель", callback_data="admin")],
-    [InlineKeyboardButton(text="✅ Сделка", callback_data="deal")]
-])
+@dp.message(Command('start'))
+async def start(message: types.Message):
+    await message.answer("👋 Добро пожаловать в магазин!", reply_markup=main_menu)
 
-# ------------------------------
-# База данных
-# ------------------------------
-conn = sqlite3.connect(DB_FILE)
-c = conn.cursor()
-c.execute('''CREATE TABLE IF NOT EXISTS products (id INTEGER PRIMARY KEY, name TEXT, mutation TEXT, price INTEGER, quantity INTEGER)''')
-c.execute('''CREATE TABLE IF NOT EXISTS orders (id INTEGER PRIMARY KEY, user_id INTEGER, username TEXT, product TEXT, action TEXT, time TEXT)''')
-conn.commit()
+@dp.message(Command('admin'))
+async def admin_panel(message: types.Message):
+    if message.from_user.id == ADMIN_ID:
+        await message.answer("🔐 Админ-панель запущена!")
+    else:
+        await message.answer("⛔ У вас нет прав для доступа к админ-панели.")
 
-# ------------------------------
-# Команды
-# ------------------------------
-@dp.message(Command("start"))
-async def start(message: Message):
-    await message.answer("Приветствую в магазине!", reply_markup=main_menu)
+@dp.callback_query(F.data == "products")
+async def show_categories(call: types.CallbackQuery):
+    await call.message.answer("Выберите категорию:", reply_markup=category_menu)
 
-# ------------------------------
-# Хендлеры на кнопки
-# ------------------------------
-@dp.callback_query()
-async def callbacks(call: CallbackQuery):
-    if call.data == "products":
-        await call.message.edit_text("Выберите категорию:", reply_markup=products_menu)
+@dp.callback_query(F.data.startswith("category_"))
+async def show_items(call: types.CallbackQuery):
+    category = call.data.split("_")[1]
+    cursor.execute("SELECT DISTINCT name FROM products WHERE category=?", (category,))
+    products = cursor.fetchall()
+    if not products:
+        await call.message.answer("Нет товаров в этой категории.")
+        return
+    markup = InlineKeyboardMarkup(row_width=1)
+    for product in products:
+        markup.add(InlineKeyboardButton(text=product[0], callback_data=f"product_{product[0]}"))
+    markup.add(InlineKeyboardButton(text="➕ Предложить своё", callback_data="propose_item"))
+    await call.message.answer(f"📦 Товары категории {category}:", reply_markup=markup)
 
-    elif call.data == "category_fish":
-        await call.message.edit_text("🐠 Fisch товары", reply_markup=await fish_menu())
+@dp.callback_query(F.data.startswith("product_"))
+async def show_product_details(call: types.CallbackQuery):
+    product_name = call.data.split("_", 1)[1]
+    cursor.execute("SELECT mutation, price, quantity FROM products WHERE name=?", (product_name,))
+    variants = cursor.fetchall()
+    if not variants:
+        await call.message.answer("Нет доступных вариантов.")
+        return
+    text = f"<b>{product_name}</b> доступные варианты:
 
-    elif call.data == "category_bloxfruit":
-        await call.message.edit_text("🍇 Bloxfruit товары", reply_markup=await bloxfruit_menu())
+"
+    markup = InlineKeyboardMarkup(row_width=1)
+    for mutation, price, quantity in variants:
+        text += f"🔹 {mutation}: {price}₽ ({quantity} шт)
+"
+        markup.add(InlineKeyboardButton(text=f"{mutation} ({quantity} шт)", callback_data=f"buy_{product_name}_{mutation}"))
+    await call.message.answer(text, reply_markup=markup)
 
-    elif call.data == "support":
-        await call.message.answer("Напишите свой вопрос, администрация скоро ответит вам лично.")
+@dp.callback_query(F.data.startswith("buy_"))
+async def buy_product(call: types.CallbackQuery):
+    _, product_name, mutation = call.data.split("_", 2)
+    cursor.execute("SELECT price, quantity FROM products WHERE name=? AND mutation=?", (product_name, mutation))
+    product = cursor.fetchone()
+    if not product or product[1] <= 0:
+        await call.message.answer("❌ Этот товар закончился.")
+        return
+    cursor.execute("UPDATE products SET quantity = quantity - 1 WHERE name=? AND mutation=?", (product_name, mutation))
+    conn.commit()
+    cursor.execute("INSERT INTO orders (user_id, username, item_name, action, timestamp) VALUES (?, ?, ?, ?, datetime('now'))",
+                   (call.from_user.id, call.from_user.username, f"{product_name} ({mutation})", "Покупка"))
+    conn.commit()
+    await call.message.answer("✅ Покупка оформлена. Ожидайте ответа администрации.")
+    await bot.send_message(ADMIN_ID, f"🛒 Новый заказ от @{call.from_user.username}: {product_name} ({mutation})")
 
-    elif call.data == "profile":
-        await call.message.answer(f"Ваш ID: {call.from_user.id}")
+@dp.callback_query(F.data == "propose_item")
+async def propose_item(call: types.CallbackQuery):
+    await call.message.answer("✏️ Опишите ваш товар и желаемый обмен. Администратор рассмотрит ваше предложение.")
 
-    elif call.data == "admin" and call.from_user.id == ADMIN_ID:
-        await call.message.answer("🔐 Админ-панель открыта.")
+@dp.callback_query(F.data == "support")
+async def support(call: types.CallbackQuery):
+    await call.message.answer("🛠 Напишите свой вопрос сюда. Администратор скоро свяжется с вами.")
 
-    elif call.data == "deal":
-        await call.message.answer("Создать сделку с администратором.")
+@dp.callback_query(F.data == "profile")
+async def profile(call: types.CallbackQuery):
+    cursor.execute("SELECT COUNT(*) FROM orders WHERE user_id=?", (call.from_user.id,))
+    orders_count = cursor.fetchone()[0]
+    await call.message.answer(f"👤 Ваш профиль:
+ID: {call.from_user.id}
+Сделок: {orders_count}")
 
-# ------------------------------
-# Функции для товаров
-# ------------------------------
-async def fish_menu():
-    kb = []
-    c.execute("SELECT DISTINCT name FROM products WHERE name LIKE '%Fish%'")
-    fishes = c.fetchall()
-    for fish in fishes:
-        kb.append([InlineKeyboardButton(text=fish[0], callback_data=f"buy_{fish[0]}")])
-    return InlineKeyboardMarkup(inline_keyboard=kb)
-
-async def bloxfruit_menu():
-    kb = []
-    c.execute("SELECT DISTINCT name FROM products WHERE name LIKE '%Fruit%'")
-    fruits = c.fetchall()
-    for fruit in fruits:
-        kb.append([InlineKeyboardButton(text=fruit[0], callback_data=f"buy_{fruit[0]}")])
-    return InlineKeyboardMarkup(inline_keyboard=kb)
-
-# ------------------------------
-# Запуск бота
-# ------------------------------
 async def main():
+    await bot.delete_webhook(drop_pending_updates=True)
     await dp.start_polling(bot)
 
 if __name__ == "__main__":
     asyncio.run(main())
+
