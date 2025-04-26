@@ -5,7 +5,7 @@ from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
 # ----------------------------
 # Настройки
-TOKEN = "ТВОЙ_ТОКЕН"  # ВСТАВЬ СВОЙ ТОКЕН СЮДА
+TOKEN = "7807213915:AAGtoLBhhKihds0Y-YGwfBFZiCAZvx-P76Y"
 ADMIN_ID = 7620745738  # ТВОЙ ID
 DB_FILE = "shop.db"
 # ----------------------------
