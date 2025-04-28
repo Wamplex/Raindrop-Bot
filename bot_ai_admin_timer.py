@@ -1,112 +1,241 @@
-import logging
-from aiogram import Bot, Dispatcher, types
-from aiogram.fsm import FSMContext, State, StatesGroup
+import asyncio
+import sqlite3
+from aiogram import Bot, Dispatcher, F, types
+from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton
+from aiogram.filters import CommandStart
 from aiogram.fsm.context import FSMContext
-from aiogram.types import ParseMode
-from aiogram.utils import executor
-import aiosqlite
+from aiogram.fsm.state import StatesGroup, State
 
-from config import TOKEN, ADMIN_ID
-
-logging.basicConfig(level=logging.INFO)
+TOKEN = "7807213915:AAGtoLBhhKihds0Y-YGwfBFZiCAZvx-P76Y"
+ADMIN_ID = 7620745738
 
 bot = Bot(TOKEN)
-dp = Dispatcher(bot)
+dp = Dispatcher()
 
-class OrderState(StatesGroup):
-    waiting_for_username = State()
-    waiting_for_deal_description = State()
+# Создание базы данных
+conn = sqlite3.connect('shop.db')
+cursor = conn.cursor()
 
-# Функция для работы с базой данных
-async def get_item(id, category):
-    async with aiosqlite.connect('shop.db') as db:
-        cursor = await db.execute("SELECT * FROM items WHERE id = ? AND category = ?", (id, category))
-        item = await cursor.fetchone()
-        return item
+cursor.execute('''
+CREATE TABLE IF NOT EXISTS products (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    category TEXT,
+    name TEXT,
+    price INTEGER,
+    quantity INTEGER
+)
+''')
 
-# Главная страница
-@dp.message_handler(commands="start")
-async def cmd_start(message: types.Message):
-    markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
-    markup.add("🤝 Создать сделку", "🐠 Товары", "💬 Отзывы", "🛠 Поддержка", "👤 Личный кабинет")
-    
-    await message.answer("Добро пожаловать! Что вы хотите сделать?", reply_markup=markup)
+cursor.execute('''
+CREATE TABLE IF NOT EXISTS users (
+    id INTEGER PRIMARY KEY,
+    orders INTEGER DEFAULT 0
+)
+''')
 
-# Создание сделки
-@dp.message_handler(text="🤝 Создать сделку")
-async def create_deal(message: types.Message):
+conn.commit()
+
+# Клавиатуры
+main_kb = ReplyKeyboardMarkup(keyboard=[
+    [KeyboardButton(text="🎯 Создать сделку")],
+    [KeyboardButton(text="🐠 Товары")],
+    [KeyboardButton(text="💬 Отзывы"), KeyboardButton(text="🛠 Поддержка")],
+    [KeyboardButton(text="👤 Личный кабинет")]
+], resize_keyboard=True)
+
+admin_kb = ReplyKeyboardMarkup(keyboard=[
+    [KeyboardButton(text="➕ Добавить товар"), KeyboardButton(text="📦 Все товары")],
+    [KeyboardButton(text="✏ Изменить товар"), KeyboardButton(text="❌ Удалить товар")],
+    [KeyboardButton(text="⬅️ Назад")]
+], resize_keyboard=True)
+
+support_kb = ReplyKeyboardMarkup(keyboard=[
+    [KeyboardButton(text="⬅️ Назад")]
+], resize_keyboard=True)
+
+# Состояния FSM
+class Deal(StatesGroup):
+    waiting_username = State()
+    waiting_description = State()
+
+class Suggest(StatesGroup):
+    waiting_text = State()
+
+class EditProduct(StatesGroup):
+    waiting_id = State()
+    waiting_new_price = State()
+    waiting_new_quantity = State()
+
+# Команды
+@dp.message(CommandStart())
+async def start(message: types.Message):
+    kb = main_kb
     if message.from_user.id == ADMIN_ID:
-        await message.answer("Введите @юзернейм второго участника сделки:")
-        await OrderState.waiting_for_username.set()
+        kb = ReplyKeyboardMarkup(
+            keyboard=main_kb.keyboard + [[KeyboardButton(text="🛡 Админ-панель")]],
+            resize_keyboard=True
+        )
+    await message.answer("Добро пожаловать в магазин!", reply_markup=kb)
 
-@dp.message_handler(state=OrderState.waiting_for_username)
-async def deal_username(message: types.Message, state: FSMContext):
-    async with state.proxy() as data:
-        data['username'] = message.text
-    await message.answer("Опишите, что будет за сделка:")
-    await OrderState.waiting_for_deal_description.set()
+@dp.message(F.text == "🎯 Создать сделку")
+async def create_deal(message: types.Message, state: FSMContext):
+    await message.answer("Отправьте @юзернейм второго участника сделки:")
+    await state.set_state(Deal.waiting_username)
 
-@dp.message_handler(state=OrderState.waiting_for_deal_description)
-async def deal_description(message: types.Message, state: FSMContext):
-    async with state.proxy() as data:
-        data['description'] = message.text
-    
-    deal_info = f"Новая сделка:\n\nУчастники:\n{data['username']}\nОписание: {data['description']}"
-    await bot.send_message(ADMIN_ID, deal_info, reply_markup=types.ReplyKeyboardMarkup(resize_keyboard=True).add("✅ Принять", "❌ Отклонить"))
-    await state.finish()
+@dp.message(Deal.waiting_username)
+async def get_username(message: types.Message, state: FSMContext):
+    await state.update_data(username=message.text)
+    await message.answer("Теперь опишите суть сделки:")
+    await state.set_state(Deal.waiting_description)
 
-# Обработка кнопок принятия/отклонения сделки
-@dp.message_handler(lambda message: message.text in ["✅ Принять", "❌ Отклонить"], user_id=ADMIN_ID)
-async def accept_or_reject(message: types.Message):
-    if message.text == "✅ Принять":
-        await message.answer("Сделка принята. Участникам отправлено уведомление.")
-        await bot.send_message(ADMIN_ID, "Сделка подтверждена.")
-        # Уведомление пользователю, который предложил сделку
-        await bot.send_message(ADMIN_ID, "Сделка подтверждена.")
-    elif message.text == "❌ Отклонить":
-        await message.answer("Сделка отклонена.")
-        # Уведомление пользователю, который предложил сделку
-        await bot.send_message(ADMIN_ID, "Сделка отклонена.")
+@dp.message(Deal.waiting_description)
+async def get_description(message: types.Message, state: FSMContext):
+    data = await state.get_data()
+    username = data["username"]
+    description = message.text
+    await bot.send_message(ADMIN_ID, f"Запрос на сделку:\nУчастник 1: @{message.from_user.username}\nУчастник 2: {username}\nОписание: {description}", reply_markup=InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(text="✅ Принять", callback_data=f"accept_deal_{message.from_user.id}"),
+                InlineKeyboardButton(text="❌ Отклонить", callback_data=f"decline_deal_{message.from_user.id}")
+            ]
+        ]
+    ))
+    await message.answer("Запрос на сделку отправлен админу!")
+    await state.clear()
 
-# Товары
-@dp.message_handler(text="🐠 Товары")
-async def show_products(message: types.Message):
-    markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
-    markup.add("🎣 Fisch", "🍇 Bloxfruit")
-    await message.answer("Выберите категорию товаров", reply_markup=markup)
+@dp.callback_query(F.data.startswith("accept_deal_"))
+async def accept_deal(callback: types.CallbackQuery):
+    user_id = int(callback.data.split("_")[-1])
+    await bot.send_message(user_id, "✅ Ваша сделка одобрена администратором!")
+    await callback.message.edit_text("Сделка принята.")
 
-@dp.message_handler(text="🎣 Fisch")
-async def show_fish(message: types.Message):
-    # Пример: показываю рыбы
-    markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
-    markup.add("Nessie", "Northstar Serpent", "Leviathan")
-    await message.answer("Выберите рыбу", reply_markup=markup)
+@dp.callback_query(F.data.startswith("decline_deal_"))
+async def decline_deal(callback: types.CallbackQuery):
+    user_id = int(callback.data.split("_")[-1])
+    await bot.send_message(user_id, "❌ Ваша сделка отклонена администратором.")
+    await callback.message.edit_text("Сделка отклонена.")
 
-@dp.message_handler(lambda message: message.text in ["Nessie", "Northstar Serpent", "Leviathan"])
-async def show_fish_mutations(message: types.Message):
-    # Пример: показываю мутации
-    markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
-    markup.add("Обычная", "Sparkling", "Shiny")
-    await message.answer("Выберите мутацию", reply_markup=markup)
+@dp.message(F.text == "🐠 Товары")
+async def show_categories(message: types.Message):
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🎣 Fisch", callback_data="category_fisch")],
+        [InlineKeyboardButton(text="🍇 Bloxfruit", callback_data="category_bloxfruit")]
+    ])
+    await message.answer("Выберите категорию:", reply_markup=kb)
 
-@dp.message_handler(text="🍇 Bloxfruit")
-async def show_fruits(message: types.Message):
-    markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
-    markup.add("Leopard", "Gas", "Dough")
-    await message.answer("Выберите фрукт", reply_markup=markup)
+@dp.callback_query(F.data.startswith("category_"))
+async def show_products(callback: types.CallbackQuery):
+    category = callback.data.split("_")[1]
+    cursor.execute("SELECT id, name, price, quantity FROM products WHERE category = ?", (category,))
+    items = cursor.fetchall()
+    kb = InlineKeyboardBuilder()
+    for item in items:
+        kb.button(text=f"{item[1]} ({item[3]} шт)", callback_data=f"buy_{item[0]}")
+    kb.button(text="➕ Предложить своё", callback_data=f"suggest_{category}")
+    await callback.message.answer(f"Товары в категории {category}:", reply_markup=kb.as_markup())
 
-# Поддержка
-@dp.message_handler(text="🛠 Поддержка")
+@dp.callback_query(F.data.startswith("buy_"))
+async def buy_product(callback: types.CallbackQuery):
+    product_id = int(callback.data.split("_")[1])
+    cursor.execute("SELECT name, price, quantity FROM products WHERE id = ?", (product_id,))
+    product = cursor.fetchone()
+    if product and product[2] > 0:
+        cursor.execute("UPDATE products SET quantity = quantity - 1 WHERE id = ?", (product_id,))
+        conn.commit()
+        cursor.execute("INSERT OR IGNORE INTO users (id) VALUES (?)", (callback.from_user.id,))
+        cursor.execute("UPDATE users SET orders = orders + 1 WHERE id = ?", (callback.from_user.id,))
+        conn.commit()
+        await bot.send_message(ADMIN_ID, f"Покупка!\nПользователь @{callback.from_user.username} купил {product[0]} за {product[1]}₽.")
+        await callback.message.answer(f"Вы успешно купили {product[0]} за {product[1]}₽!")
+    else:
+        await callback.message.answer("Товара нет в наличии.")
+
+@dp.callback_query(F.data.startswith("suggest_"))
+async def suggest_item(callback: types.CallbackQuery, state: FSMContext):
+    await callback.message.answer("Опишите ваш товар и цену:")
+    await state.set_state(Suggest.waiting_text)
+
+@dp.message(Suggest.waiting_text)
+async def get_suggestion(message: types.Message, state: FSMContext):
+    await bot.send_message(ADMIN_ID, f"Новое предложение от @{message.from_user.username}:\n{message.text}", reply_markup=InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(text="✅ Принять", callback_data="accept_suggest"),
+                InlineKeyboardButton(text="❌ Отклонить", callback_data="decline_suggest")
+            ]
+        ]
+    ))
+    await message.answer("Ваше предложение отправлено администратору!")
+    await state.clear()
+
+@dp.message(F.text == "💬 Отзывы")
+async def reviews(message: types.Message):
+    await message.answer("Отзывы можно посмотреть здесь: @raindrop_reviews")
+
+@dp.message(F.text == "🛠 Поддержка")
 async def support(message: types.Message):
-    await message.answer("Напишите ваш вопрос. Администратор скоро ответит вам лично.")
+    await message.answer("Напишите ваш вопрос. Администратор ответит вам лично.", reply_markup=support_kb)
 
-# Личный кабинет
-@dp.message_handler(text="👤 Личный кабинет")
-async def personal_cabinet(message: types.Message):
-    user_id = message.from_user.id
-    # Здесь будет логика получения статистики из базы данных по заказам
-    await message.answer(f"Ваш ID: {user_id}\nКол-во заказов: 0")
+@dp.message(F.text == "👤 Личный кабинет")
+async def profile(message: types.Message):
+    cursor.execute("SELECT orders FROM users WHERE id = ?", (message.from_user.id,))
+    orders = cursor.fetchone()
+    orders = orders[0] if orders else 0
+    await message.answer(f"Ваш ID: {message.from_user.id}\nКоличество заказов: {orders}")
 
-# Запуск бота
-if __name__ == '__main__':
-    executor.start_polling(dp, skip_updates=True)
+@dp.message(F.text == "🛡 Админ-панель")
+async def admin_panel(message: types.Message):
+    if message.from_user.id == ADMIN_ID:
+        await message.answer("Вы в админ-панели.", reply_markup=admin_kb)
+    else:
+        await message.answer("У вас нет доступа.")
+
+# Админка действия
+@dp.message(F.text == "📦 Все товары")
+async def list_products(message: types.Message):
+    cursor.execute("SELECT id, category, name, price, quantity FROM products")
+    products = cursor.fetchall()
+    text = "\n".join([f"ID {p[0]} | {p[1]} | {p[2]} | {p[3]}₽ | {p[4]} шт" for p in products])
+    await message.answer(text or "Нет товаров.")
+
+@dp.message(F.text == "✏ Изменить товар")
+async def edit_product_start(message: types.Message, state: FSMContext):
+    await message.answer("Введите ID товара для изменения:")
+    await state.set_state(EditProduct.waiting_id)
+
+@dp.message(EditProduct.waiting_id)
+async def edit_product_id(message: types.Message, state: FSMContext):
+    await state.update_data(id=message.text)
+    await message.answer("Введите новую цену:")
+    await state.set_state(EditProduct.waiting_new_price)
+
+@dp.message(EditProduct.waiting_new_price)
+async def edit_product_price(message: types.Message, state: FSMContext):
+    await state.update_data(price=message.text)
+    await message.answer("Введите новое количество:")
+    await state.set_state(EditProduct.waiting_new_quantity)
+
+@dp.message(EditProduct.waiting_new_quantity)
+async def edit_product_quantity(message: types.Message, state: FSMContext):
+    data = await state.get_data()
+    cursor.execute("UPDATE products SET price = ?, quantity = ? WHERE id = ?", (data["price"], message.text, data["id"]))
+    conn.commit()
+    await message.answer("Товар успешно обновлён.")
+    await state.clear()
+
+@dp.message(F.text == "❌ Удалить товар")
+async def delete_product(message: types.Message):
+    await message.answer("Отправьте ID товара для удаления:")
+
+@dp.message(F.text.regexp(r"^\d+$"))
+async def delete_product_by_id(message: types.Message):
+    cursor.execute("DELETE FROM products WHERE id = ?", (message.text,))
+    conn.commit()
+    await message.answer("Товар удалён.")
+
+async def main():
+    await dp.start_polling(bot)
+
+if __name__ == "__main__":
+    asyncio.run(main())
