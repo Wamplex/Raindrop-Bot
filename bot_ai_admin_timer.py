@@ -1,125 +1,112 @@
-import asyncio
-import sqlite3
-from aiogram import Bot, Dispatcher, types, F
-from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
-from aiogram.filters import Command
-from datetime import datetime
+import logging
+from aiogram import Bot, Dispatcher, types
+from aiogram.fsm import FSMContext, State, StatesGroup
+from aiogram.fsm.context import FSMContext
+from aiogram.types import ParseMode
+from aiogram.utils import executor
+import aiosqlite
 
-# Настройки
-TOKEN = "7807213915:AAGtoLBhhKihds0Y-YGwfBFZiCAZvx-P76Y"
-ADMIN_ID = 7620745738
-DB_FILE = "shop.db"
+from config import TOKEN, ADMIN_ID
 
-bot = Bot(token=TOKEN, parse_mode="HTML")
-dp = Dispatcher()
+logging.basicConfig(level=logging.INFO)
 
-# База данных
-conn = sqlite3.connect(DB_FILE)
-cursor = conn.cursor()
-cursor.execute('''CREATE TABLE IF NOT EXISTS products (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    name TEXT,
-    category TEXT,
-    price INTEGER,
-    stock INTEGER,
-    mutation TEXT
-)''')
-cursor.execute('''CREATE TABLE IF NOT EXISTS orders (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    user_id INTEGER,
-    username TEXT,
-    product TEXT,
-    action TEXT,
-    timestamp TEXT
-)''')
-conn.commit()
+bot = Bot(TOKEN)
+dp = Dispatcher(bot)
 
-# Главное меню
-main_menu = InlineKeyboardMarkup(inline_keyboard=[
-    [InlineKeyboardButton(text="\ud83d\udc20 Товары", callback_data="products")],
-    [InlineKeyboardButton(text="\ud83d\udcac Отзывы", url="https://t.me/raindrop_reviews")],
-    [InlineKeyboardButton(text="\ud83d\udd27 Поддержка", callback_data="support")],
-    [InlineKeyboardButton(text="\ud83d\udc64 Личный кабинет", callback_data="profile")]
-])
+class OrderState(StatesGroup):
+    waiting_for_username = State()
+    waiting_for_deal_description = State()
 
-category_menu = InlineKeyboardMarkup(inline_keyboard=[
-    [InlineKeyboardButton(text="\ud83c\udf3f Fisch", callback_data="category_fisch")],
-    [InlineKeyboardButton(text="\ud83c\udf47 Bloxfruit", callback_data="category_bloxfruit")]
-])
+# Функция для работы с базой данных
+async def get_item(id, category):
+    async with aiosqlite.connect('shop.db') as db:
+        cursor = await db.execute("SELECT * FROM items WHERE id = ? AND category = ?", (id, category))
+        item = await cursor.fetchone()
+        return item
 
-@dp.message(Command("start"))
-async def start(message: types.Message):
-    await message.answer("Добро пожаловать!", reply_markup=main_menu)
+# Главная страница
+@dp.message_handler(commands="start")
+async def cmd_start(message: types.Message):
+    markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
+    markup.add("🤝 Создать сделку", "🐠 Товары", "💬 Отзывы", "🛠 Поддержка", "👤 Личный кабинет")
+    
+    await message.answer("Добро пожаловать! Что вы хотите сделать?", reply_markup=markup)
 
-@dp.callback_query(F.data == "products")
-async def show_categories(call: types.CallbackQuery):
-    await call.message.answer("Выберите категорию:", reply_markup=category_menu)
+# Создание сделки
+@dp.message_handler(text="🤝 Создать сделку")
+async def create_deal(message: types.Message):
+    if message.from_user.id == ADMIN_ID:
+        await message.answer("Введите @юзернейм второго участника сделки:")
+        await OrderState.waiting_for_username.set()
 
-@dp.callback_query(F.data == "profile")
-async def profile(call: types.CallbackQuery):
-    cursor.execute("SELECT COUNT(*) FROM orders WHERE user_id=?", (call.from_user.id,))
-    orders_count = cursor.fetchone()[0]
-    await call.message.answer(f"\ud83d\udc64 Ваш ID: {call.from_user.id}\n\ud83d\udd22 Сделок: {orders_count}")
+@dp.message_handler(state=OrderState.waiting_for_username)
+async def deal_username(message: types.Message, state: FSMContext):
+    async with state.proxy() as data:
+        data['username'] = message.text
+    await message.answer("Опишите, что будет за сделка:")
+    await OrderState.waiting_for_deal_description.set()
 
-@dp.callback_query(F.data == "support")
-async def support(call: types.CallbackQuery):
-    await call.message.answer("\ud83d\udd27 Напишите свой вопрос. Администратор ответит вам лично.")
+@dp.message_handler(state=OrderState.waiting_for_deal_description)
+async def deal_description(message: types.Message, state: FSMContext):
+    async with state.proxy() as data:
+        data['description'] = message.text
+    
+    deal_info = f"Новая сделка:\n\nУчастники:\n{data['username']}\nОписание: {data['description']}"
+    await bot.send_message(ADMIN_ID, deal_info, reply_markup=types.ReplyKeyboardMarkup(resize_keyboard=True).add("✅ Принять", "❌ Отклонить"))
+    await state.finish()
 
-@dp.callback_query(F.data.startswith("category_"))
-async def show_products(call: types.CallbackQuery):
-    category = call.data.split("_")[1]
-    cursor.execute("SELECT DISTINCT name FROM products WHERE category=?", (category,))
-    products = cursor.fetchall()
-    if not products:
-        await call.message.answer("Товары отсутствуют.")
-        return
-    kb = InlineKeyboardMarkup()
-    for product in products:
-        kb.add(InlineKeyboardButton(text=product[0], callback_data=f"product_{product[0]}"))
-    kb.add(InlineKeyboardButton(text="➕ Предложить своё", callback_data="propose_item"))
-    await call.message.answer(f"Товары категории {category}:", reply_markup=kb)
+# Обработка кнопок принятия/отклонения сделки
+@dp.message_handler(lambda message: message.text in ["✅ Принять", "❌ Отклонить"], user_id=ADMIN_ID)
+async def accept_or_reject(message: types.Message):
+    if message.text == "✅ Принять":
+        await message.answer("Сделка принята. Участникам отправлено уведомление.")
+        await bot.send_message(ADMIN_ID, "Сделка подтверждена.")
+        # Уведомление пользователю, который предложил сделку
+        await bot.send_message(ADMIN_ID, "Сделка подтверждена.")
+    elif message.text == "❌ Отклонить":
+        await message.answer("Сделка отклонена.")
+        # Уведомление пользователю, который предложил сделку
+        await bot.send_message(ADMIN_ID, "Сделка отклонена.")
 
-@dp.callback_query(F.data.startswith("product_"))
-async def product_details(call: types.CallbackQuery):
-    name = call.data.split("_", 1)[1]
-    cursor.execute("SELECT mutation, price, stock FROM products WHERE name=?", (name,))
-    entries = cursor.fetchall()
-    if not entries:
-        await call.message.answer("Нет доступных вариантов.")
-        return
-    text = f"Товар: {name}\n\n"
-    kb = InlineKeyboardMarkup()
-    for mutation, price, stock in entries:
-        if mutation:
-            text += f"• {mutation}: {price}₽ ({stock} шт.)\n"
-            kb.add(InlineKeyboardButton(text=f"{mutation} ({stock})", callback_data=f"buy_{name}_{mutation}"))
-        else:
-            text += f"• {price}₽ ({stock} шт.)\n"
-            kb.add(InlineKeyboardButton(text=f"Без мутации ({stock})", callback_data=f"buy_{name}_none"))
-    await call.message.answer(text, reply_markup=kb)
+# Товары
+@dp.message_handler(text="🐠 Товары")
+async def show_products(message: types.Message):
+    markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
+    markup.add("🎣 Fisch", "🍇 Bloxfruit")
+    await message.answer("Выберите категорию товаров", reply_markup=markup)
 
-@dp.callback_query(F.data.startswith("buy_"))
-async def confirm_buy(call: types.CallbackQuery):
-    _, name, mutation = call.data.split("_", 2)
-    cursor.execute("SELECT price, stock FROM products WHERE name=? AND (mutation=? OR mutation IS NULL)", (name, mutation if mutation != "none" else None))
-    product = cursor.fetchone()
-    if not product or product[1] <= 0:
-        await call.message.answer("Товар отсутствует на складе.")
-        return
-    cursor.execute("UPDATE products SET stock = stock - 1 WHERE name=? AND (mutation=? OR mutation IS NULL)", (name, mutation if mutation != "none" else None))
-    cursor.execute("INSERT INTO orders (user_id, username, product, action, timestamp) VALUES (?, ?, ?, ?, ?)",
-                   (call.from_user.id, call.from_user.username, f"{name} {mutation}", "Покупка", datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
-    conn.commit()
-    await call.message.answer("Запрос отправлен. Ожидайте ответа администратора.")
-    await bot.send_message(ADMIN_ID, f"\ud83d\udce2 Новый заказ: {name} {mutation} от @{call.from_user.username}")
+@dp.message_handler(text="🎣 Fisch")
+async def show_fish(message: types.Message):
+    # Пример: показываю рыбы
+    markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
+    markup.add("Nessie", "Northstar Serpent", "Leviathan")
+    await message.answer("Выберите рыбу", reply_markup=markup)
 
-@dp.callback_query(F.data == "propose_item")
-async def propose_item(call: types.CallbackQuery):
-    await call.message.answer("Опишите ваш товар и что хотите за него.")
+@dp.message_handler(lambda message: message.text in ["Nessie", "Northstar Serpent", "Leviathan"])
+async def show_fish_mutations(message: types.Message):
+    # Пример: показываю мутации
+    markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
+    markup.add("Обычная", "Sparkling", "Shiny")
+    await message.answer("Выберите мутацию", reply_markup=markup)
 
-async def main():
-    await bot.delete_webhook(drop_pending_updates=True)
-    await dp.start_polling(bot)
+@dp.message_handler(text="🍇 Bloxfruit")
+async def show_fruits(message: types.Message):
+    markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
+    markup.add("Leopard", "Gas", "Dough")
+    await message.answer("Выберите фрукт", reply_markup=markup)
 
-if __name__ == "__main__":
-    asyncio.run(main())
+# Поддержка
+@dp.message_handler(text="🛠 Поддержка")
+async def support(message: types.Message):
+    await message.answer("Напишите ваш вопрос. Администратор скоро ответит вам лично.")
+
+# Личный кабинет
+@dp.message_handler(text="👤 Личный кабинет")
+async def personal_cabinet(message: types.Message):
+    user_id = message.from_user.id
+    # Здесь будет логика получения статистики из базы данных по заказам
+    await message.answer(f"Ваш ID: {user_id}\nКол-во заказов: 0")
+
+# Запуск бота
+if __name__ == '__main__':
+    executor.start_polling(dp, skip_updates=True)
