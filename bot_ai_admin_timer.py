@@ -10,7 +10,7 @@ BOT_TOKEN = "твой_токен"
 ADMIN_ID = 7620745738
 REVIEWS_LINK = "https://t.me/raindrop_reviews"
 
-bot = Bot(token=BOT_TOKEN, parse_mode=ParseMode.HTML)
+bot = Bot(token=7807213915:AAFj1bZwpdv0Pv04vbh-eY74e-fL49RQ25Y, parse_mode=ParseMode.HTML)
 dp = Dispatcher(storage=MemoryStorage())
 
 # ========== ВРЕМЕННОЕ ХРАНЕНИЕ ==========
