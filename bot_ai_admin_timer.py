@@ -1,11 +1,11 @@
 
 "import asyncio"
-"from aiogram import Bot, Dispatcher, F, types
-"from aiogram.enums import ParseMode
-"from aiogram.types import Message, CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup
-"from aiogram.fsm.state import State, StatesGroup
-"from aiogram.fsm.context import FSMContext
-"from aiogram.fsm.storage.memory import MemoryStorage
+"from aiogram import Bot, Dispatcher, F, types"
+"from aiogram.enums import ParseMode"
+"from aiogram.types import Message, CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup"
+"from aiogram.fsm.state import State, StatesGroup"
+"from aiogram.fsm.context import FSMContext"
+"from aiogram.fsm.storage.memory import MemoryStorage"
 
 # 🔐 ВСТАВЬ СЮДА ТВОЙ ТОКЕН В КАВЫЧКАХ:
 BOT_TOKEN = "7807213915:AAHNcYeY27DuOtkJbwH_2lHbElfKd212FZU"
