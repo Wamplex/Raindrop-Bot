@@ -69,7 +69,7 @@ async def show_categories(callback: CallbackQuery):
 
 @dp.callback_query(F.data == "cat_fisch")
 async def show_fisch(callback: CallbackQuery):
-    text = "🎣 Fisch:
+    text = "🎣 Fisch":
 
 "
     for product in products:
