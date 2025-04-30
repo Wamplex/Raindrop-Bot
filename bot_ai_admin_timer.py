@@ -1,5 +1,5 @@
 
-"import asyncio
+"import asyncio"
 "from aiogram import Bot, Dispatcher, F, types
 "from aiogram.enums import ParseMode
 "from aiogram.types import Message, CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup
