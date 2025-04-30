@@ -16,14 +16,14 @@ bot = Bot(token=BOT_TOKEN, parse_mode=ParseMode.HTML)
 dp = Dispatcher(storage=MemoryStorage())
 
 # ===================== STATES =====================
-"class DealStates(StatesGroup):
+"class DealStates(StatesGroup)":
     waiting_username = State()
     waiting_description = State()
 
-"class OfferStates(StatesGroup):
+"class OfferStates(StatesGroup)":
     waiting_offer = State()
 
-"class SupportStates(StatesGroup):
+"class SupportStates(StatesGroup)":
     waiting_question = State()
 
 # ===================== FAKE DATA =====================
@@ -38,7 +38,7 @@ products = [
 deals = []
 
 # ===================== KEYBOARDS =====================
-"def main_menu(is_admin=False):
+"def main_menu(is_admin=False)":
     buttons = [
         [InlineKeyboardButton(text="🤝 Создать сделку", callback_data="create_deal")],
         [InlineKeyboardButton(text="🐠 Товары", callback_data="products")],
@@ -50,15 +50,15 @@ deals = []
         buttons.append([InlineKeyboardButton(text="🛡 Админ-панель", callback_data="admin")])
    " return InlineKeyboardMarkup(inline_keyboard=buttons)
 
-"def category_menu():
-   " return InlineKeyboardMarkup(inline_keyboard=[
+"def category_menu()":
+   " return InlineKeyboardMarkup(inline_keyboard=["
         [InlineKeyboardButton(text="🎣 Fisch", callback_data="cat_fisch")],
         [InlineKeyboardButton(text="🍇 Bloxfruit", callback_data="cat_bloxfruit")]
     ])
 
 # ===================== HANDLERS =====================
 @dp.message(F.text, F.chat.type == "private")
-"async def start_handler(message: Message):
+"async def start_handler(message: Message)":
     is_admin = message.from_user.id == ADMIN_ID
     users[message.from_user.id] = users.get(message.from_user.id, {"orders": 0})
     "await message.answer("Добро пожаловать в магазин!", reply_markup=main_menu(is_admin))
