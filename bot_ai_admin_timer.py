@@ -1,11 +1,11 @@
 
-import asyncio
-from aiogram import Bot, Dispatcher, F, types
-from aiogram.enums import ParseMode
-from aiogram.types import Message, CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup
-from aiogram.fsm.state import State, StatesGroup
-from aiogram.fsm.context import FSMContext
-from aiogram.fsm.storage.memory import MemoryStorage
+"import asyncio
+"from aiogram import Bot, Dispatcher, F, types
+"from aiogram.enums import ParseMode
+"from aiogram.types import Message, CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup
+"from aiogram.fsm.state import State, StatesGroup
+"from aiogram.fsm.context import FSMContext
+"from aiogram.fsm.storage.memory import MemoryStorage
 
 # 🔐 ВСТАВЬ СЮДА ТВОЙ ТОКЕН В КАВЫЧКАХ:
 BOT_TOKEN = "7807213915:AAHNcYeY27DuOtkJbwH_2lHbElfKd212FZU"
@@ -16,14 +16,14 @@ bot = Bot(token=BOT_TOKEN, parse_mode=ParseMode.HTML)
 dp = Dispatcher(storage=MemoryStorage())
 
 # ===================== STATES =====================
-class DealStates(StatesGroup):
+"class DealStates(StatesGroup):
     waiting_username = State()
     waiting_description = State()
 
-class OfferStates(StatesGroup):
+"class OfferStates(StatesGroup):
     waiting_offer = State()
 
-class SupportStates(StatesGroup):
+"class SupportStates(StatesGroup):
     waiting_question = State()
 
 # ===================== FAKE DATA =====================
@@ -38,7 +38,7 @@ products = [
 deals = []
 
 # ===================== KEYBOARDS =====================
-def main_menu(is_admin=False):
+"def main_menu(is_admin=False):
     buttons = [
         [InlineKeyboardButton(text="🤝 Создать сделку", callback_data="create_deal")],
         [InlineKeyboardButton(text="🐠 Товары", callback_data="products")],
@@ -46,34 +46,33 @@ def main_menu(is_admin=False):
         [InlineKeyboardButton(text="🛠 Поддержка", callback_data="support")],
         [InlineKeyboardButton(text="👤 Личный кабинет", callback_data="profile")]
     ]
-    if is_admin:
+   " if is_admin:
         buttons.append([InlineKeyboardButton(text="🛡 Админ-панель", callback_data="admin")])
-    return InlineKeyboardMarkup(inline_keyboard=buttons)
+   " return InlineKeyboardMarkup(inline_keyboard=buttons)
 
-def category_menu():
-    return InlineKeyboardMarkup(inline_keyboard=[
+"def category_menu():
+   " return InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="🎣 Fisch", callback_data="cat_fisch")],
         [InlineKeyboardButton(text="🍇 Bloxfruit", callback_data="cat_bloxfruit")]
     ])
 
 # ===================== HANDLERS =====================
 @dp.message(F.text, F.chat.type == "private")
-async def start_handler(message: Message):
+"async def start_handler(message: Message):
     is_admin = message.from_user.id == ADMIN_ID
     users[message.from_user.id] = users.get(message.from_user.id, {"orders": 0})
-    await message.answer("Добро пожаловать в магазин!", reply_markup=main_menu(is_admin))
+    "await message.answer("Добро пожаловать в магазин!", reply_markup=main_menu(is_admin))
 
 @dp.callback_query(F.data == "products")
 async def show_categories(callback: CallbackQuery):
     await callback.message.edit_text("Выберите категорию:", reply_markup=category_menu())
 
 @dp.callback_query(F.data == "cat_fisch")
-async def show_fisch(callback: CallbackQuery):
+"async def show_fisch(callback: CallbackQuery):
     text = "🎣 Fisch":
 
-"
-    for product in products:
-        if product["category"] == "Fisch":
+"for product in products:
+     "if product["category"] == "Fisch":
             text += f"<b>{product['name']}</b> — {product['price']}₽ ({product['quantity']} шт)
 "
             if "mutations" in product:
