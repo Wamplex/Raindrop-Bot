@@ -86,6 +86,18 @@ def products_kb(category):
     kb.button(text="➕ Предложить своё", callback_data=f"suggest_{category}")
     return kb.adjust(1).as_markup()
 
+def mutations_kb(name):
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("SELECT id, mutation, price, quantity FROM products WHERE name = ?", (name,))
+    items = cursor.fetchall()
+    kb = InlineKeyboardBuilder()
+    for item in items:
+        m = item[1] if item[1] else "Без мутации"
+        text = f"{m} - {item[2]}₽ (x{item[3]})"
+        kb.button(text=text, callback_data=f"buy_{item[0]}")
+    return kb.adjust(1).as_markup()
+
 # === BOT SETUP ===
 bot = Bot(token=TOKEN, parse_mode=ParseMode.HTML)
 dp = Dispatcher()
@@ -131,12 +143,61 @@ async def show_products(callback: types.CallbackQuery):
     category = callback.data.split("_")[1]
     await callback.message.edit_text("Выберите товар:", reply_markup=products_kb(category))
 
+@router.callback_query(F.data.startswith("product_"))
+async def show_mutations(callback: types.CallbackQuery):
+    name = callback.data.split("_", 1)[1]
+    await callback.message.edit_text(f"Варианты товара <b>{name}</b>:", reply_markup=mutations_kb(name))
+
+@router.callback_query(F.data.startswith("buy_"))
+async def process_purchase(callback: types.CallbackQuery):
+    product_id = int(callback.data.split("_")[1])
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute("SELECT name, mutation, price, quantity FROM products WHERE id = ?", (product_id,))
+    prod = cur.fetchone()
+    if not prod:
+        await callback.answer("Товар не найден", show_alert=True)
+        return
+    name, mutation, price, quantity = prod
+    if quantity <= 0:
+        await callback.answer("Товар закончился", show_alert=True)
+        return
+
+    cur.execute("UPDATE products SET quantity = quantity - 1 WHERE id = ?", (product_id,))
+    cur.execute("INSERT OR IGNORE INTO users (user_id) VALUES (?)", (callback.from_user.id,))
+    cur.execute("UPDATE users SET orders_count = orders_count + 1 WHERE user_id = ?", (callback.from_user.id,))
+    cur.execute("INSERT INTO orders (user_id, product_id, quantity, total_price, created_at) VALUES (?, ?, 1, ?, ?)",
+                (callback.from_user.id, product_id, price, datetime.now().isoformat()))
+    conn.commit()
+    conn.close()
+
+    await callback.message.answer(f"✅ Вы купили: <b>{name} ({mutation if mutation else 'Без мутации'})</b> за {price}₽")
+    await bot.send_message(ADMIN_ID, f"<b>💰 Покупка:</b>\nID: {callback.from_user.id}\nТовар: {name} ({mutation})\nЦена: {price}₽")
+
 # --- ADMIN PANEL ---
 @router.message(F.text == "🛡 Админ-панель")
 async def admin_panel(message: Message):
     if message.from_user.id != ADMIN_ID:
         return
-    await message.answer("<b>Админ-панель:</b>\n1. Просмотр товаров\n2. Изменить цену\n3. Изменить кол-во\n4. Удалить товар\n(будет реализовано в полном коде)")
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="Просмотр товаров", callback_data="admin_view_products")],
+        [InlineKeyboardButton(text="Изменить цену товара", callback_data="admin_edit_price")],
+        [InlineKeyboardButton(text="Изменить количество товара", callback_data="admin_edit_quantity")],
+        [InlineKeyboardButton(text="Удалить товар", callback_data="admin_delete_product")],
+    ])
+    await message.answer("<b>Админ-панель:</b>\n1. Просмотр товаров\n2. Изменить цену\n3. Изменить кол-во\n4. Удалить товар", reply_markup=kb)
+
+@router.callback_query(F.data == "admin_view_products")
+async def admin_view_products(callback: types.CallbackQuery):
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("SELECT id, category, name, mutation, price, quantity FROM products")
+    products = cursor.fetchall()
+    response = "<b>Все товары:</b>\n"
+    for prod in products:
+        response += f"ID: {prod[0]} | Категория: {prod[1]} | Товар: {prod[2]} | Мутация: {prod[3] if prod[3] else 'Нет'} | Цена: {prod[4]}₽ | Кол-во: {prod[5]}\n"
+    await callback.message.edit_text(response)
+    conn.close()
 
 # === MAIN ===
 async def main():
@@ -146,4 +207,5 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
+
 
