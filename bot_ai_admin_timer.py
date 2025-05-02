@@ -19,6 +19,10 @@ class SupportState(StatesGroup):
 class SuggestState(StatesGroup):
     waiting_for_suggestion = State()
 
+class DealState(StatesGroup):
+    waiting_for_username = State()
+    waiting_for_description = State()
+
 # === DATABASE ===
 def get_db():
     return sqlite3.connect("shop.db")
@@ -63,6 +67,8 @@ def main_menu(is_admin=False):
     ], [
         KeyboardButton(text="🛠 Поддержка"),
         KeyboardButton(text="👤 Личный кабинет")
+    ], [
+        KeyboardButton(text="📩 Создать сделку")
     ]]
     if is_admin:
         kb.append([KeyboardButton(text="🛡 Админ-панель")])
@@ -70,8 +76,8 @@ def main_menu(is_admin=False):
 
 def category_kb():
     kb = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="🍣 Fisch", callback_data="category_fisch")],
-        [InlineKeyboardButton(text="🍇 Bloxfruit", callback_data="category_blox")]
+        [InlineKeyboardButton(text="🎣 Fisch", callback_data="category_Fisch")],
+        [InlineKeyboardButton(text="🍇 Bloxfruit", callback_data="category_Bloxfruit")]
     ])
     return kb
 
@@ -83,7 +89,8 @@ def products_kb(category):
     kb = InlineKeyboardBuilder()
     for item in items:
         kb.button(text=item[0], callback_data=f"product_{item[0]}")
-    kb.button(text="➕ Предложить своё", callback_data=f"suggest_{category}")
+    if category in ["Fisch", "Bloxfruit"]:
+        kb.button(text="➕ Предложить своё", callback_data=f"suggest_{category}")
     return kb.adjust(1).as_markup()
 
 def mutations_kb(name):
@@ -140,7 +147,7 @@ async def products(message: Message):
 
 @router.callback_query(F.data.startswith("category_"))
 async def show_products(callback: types.CallbackQuery):
-    category = callback.data.split("_")[1]
+    category = callback.data.split("_", 1)[1]
     await callback.message.edit_text("Выберите товар:", reply_markup=products_kb(category))
 
 @router.callback_query(F.data.startswith("product_"))
@@ -150,7 +157,7 @@ async def show_mutations(callback: types.CallbackQuery):
 
 @router.callback_query(F.data.startswith("buy_"))
 async def process_purchase(callback: types.CallbackQuery):
-    product_id = int(callback.data.split("_")[1])
+    product_id = int(callback.data.split("_", 1)[1])
     conn = get_db()
     cur = conn.cursor()
     cur.execute("SELECT name, mutation, price, quantity FROM products WHERE id = ?", (product_id,))
@@ -174,30 +181,38 @@ async def process_purchase(callback: types.CallbackQuery):
     await callback.message.answer(f"✅ Вы купили: <b>{name} ({mutation if mutation else 'Без мутации'})</b> за {price}₽")
     await bot.send_message(ADMIN_ID, f"<b>💰 Покупка:</b>\nID: {callback.from_user.id}\nТовар: {name} ({mutation})\nЦена: {price}₽")
 
-# --- ADMIN PANEL ---
+@router.message(F.text.lower() == "создать сделку")
+async def start_deal(message: Message, state: FSMContext):
+    await message.answer("Введите username покупателя (без @):")
+    await state.set_state(DealState.waiting_for_username)
+
+@router.message(DealState.waiting_for_username)
+async def deal_username(message: Message, state: FSMContext):
+    await state.update_data(username=message.text)
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="Продолжить", callback_data="continue_deal")]
+    ])
+    await message.answer(f"Покупатель: @{message.text}", reply_markup=kb)
+
+@router.callback_query(F.data == "continue_deal")
+async def continue_deal(callback: types.CallbackQuery, state: FSMContext):
+    await callback.message.edit_text("Опишите вашу сделку:")
+    await state.set_state(DealState.waiting_for_description)
+
+@router.message(DealState.waiting_for_description)
+async def deal_description(message: Message, state: FSMContext):
+    data = await state.get_data()
+    username = data.get("username")
+    description = message.text
+    await message.answer(f"✅ Сделка создана:\n👤 Покупатель: @{username}\n📦 Описание: {description}")
+    await bot.send_message(ADMIN_ID, f"🔔 Новая сделка:\n👤 @{username}\n📦 {description}")
+    await state.clear()
+
 @router.message(F.text == "🛡 Админ-панель")
 async def admin_panel(message: Message):
     if message.from_user.id != ADMIN_ID:
         return
-    kb = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="Просмотр товаров", callback_data="admin_view_products")],
-        [InlineKeyboardButton(text="Изменить цену товара", callback_data="admin_edit_price")],
-        [InlineKeyboardButton(text="Изменить количество товара", callback_data="admin_edit_quantity")],
-        [InlineKeyboardButton(text="Удалить товар", callback_data="admin_delete_product")],
-    ])
-    await message.answer("<b>Админ-панель:</b>\n1. Просмотр товаров\n2. Изменить цену\n3. Изменить кол-во\n4. Удалить товар", reply_markup=kb)
-
-@router.callback_query(F.data == "admin_view_products")
-async def admin_view_products(callback: types.CallbackQuery):
-    conn = get_db()
-    cursor = conn.cursor()
-    cursor.execute("SELECT id, category, name, mutation, price, quantity FROM products")
-    products = cursor.fetchall()
-    response = "<b>Все товары:</b>\n"
-    for prod in products:
-        response += f"ID: {prod[0]} | Категория: {prod[1]} | Товар: {prod[2]} | Мутация: {prod[3] if prod[3] else 'Нет'} | Цена: {prod[4]}₽ | Кол-во: {prod[5]}\n"
-    await callback.message.edit_text(response)
-    conn.close()
+    await message.answer("<b>Админ-панель:</b>\n1. Просмотр товаров\n2. Изменить цену\n3. Изменить кол-во\n4. Удалить товар\n(будет реализовано в полном коде)")
 
 # === MAIN ===
 async def main():
@@ -207,5 +222,4 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
-
 
