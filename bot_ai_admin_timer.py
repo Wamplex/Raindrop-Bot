@@ -6,7 +6,7 @@ from aiogram.types import (
 from aiogram import Router
 import asyncio
 
-TOKEN = 'YOUR_BOT_TOKEN'
+TOKEN = '7807213915:AAHNcYeY27DuOtkJbwH_2lHbElfKd212FZU'
 bot = Bot(token=TOKEN)
 dp = Dispatcher()
 
