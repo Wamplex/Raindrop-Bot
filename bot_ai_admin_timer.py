@@ -1,13 +1,11 @@
+import asyncio
 from aiogram import Bot, Dispatcher, F, Router, types
 from aiogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
 from aiogram.filters import CommandStart
-import asyncio
 
-TOKEN = "7807213915:AAHNcYeY27DuOtkJbwH_2lHbElfKd212FZU"
+TOKEN = "7807213915:AAHNcYeY27DuOtkJbwH_2lHbElfKd212FZU"  # замени на свой токен
 ADMIN_ID = 7620745738  # замени на свой Telegram ID
 
-bot = Bot(token=TOKEN)
-dp = Dispatcher()
 router = Router()
 
 @router.message(CommandStart())
@@ -22,7 +20,7 @@ async def start_handler(message: Message):
     ])
     if message.from_user.id == ADMIN_ID:
         kb.inline_keyboard.append([InlineKeyboardButton(text="🌐 Админ-панель", callback_data="admin")])
-    
+
     await message.answer("Привет! Добро пожаловать в магазин.", reply_markup=kb)
 
 @router.callback_query(F.data == "create_deal")
@@ -47,10 +45,11 @@ async def admin_callback(callback: CallbackQuery):
         return
     await callback.message.edit_text("🌐 Админ-панель:\n\n1. Сделать рассылку\n2. Посмотреть активных пользователей\n3. Ответить на обращение\n4. Изменить кнопки меню\n5. Настройки бота")
 
-# подключаем router
-dp.include_router(router)
-
+# запускаем бот
 async def main():
+    bot = Bot(token=TOKEN)
+    dp = Dispatcher()
+    dp.include_router(router)
     await dp.start_polling(bot)
 
 if __name__ == "__main__":
