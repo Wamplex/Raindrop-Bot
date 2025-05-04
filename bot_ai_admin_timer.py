@@ -4,7 +4,7 @@ from aiogram.filters import CommandStart
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 import asyncio
 
-TOKEN = "твой_токен_сюда"
+TOKEN = "7807213915:AAHNcYeY27DuOtkJbwH_2lHbElfKd212FZU"
 ADMIN_ID = 7620745738
 
 bot = Bot(token=TOKEN)
