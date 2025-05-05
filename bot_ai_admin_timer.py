@@ -2,21 +2,23 @@ import asyncio
 from aiogram import Bot, Dispatcher, F, Router, types
 from aiogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery, ReplyKeyboardMarkup, KeyboardButton
 from aiogram.filters import CommandStart
-from aiogram.enums import ParseMode
-from aiogram.fsm.context import FSMContext
+from aiogram.enums.parse_mode import ParseMode
 from aiogram.fsm.state import State, StatesGroup
+from aiogram.fsm.context import FSMContext
 from datetime import datetime, timedelta
 
 TOKEN = "7807213915:AAEkplZ9d3AXmbX6U11R2GoFPHPhLnspaus"  # Замените на свой токен
 ADMIN_ID = 7620745738  # Ваш Telegram ID
-ADMINS = {ADMIN_ID}  # Начальный список админов
+ADMINS = {ADMIN_ID}
 
 bot = Bot(token=TOKEN, parse_mode=ParseMode.HTML)
 dp = Dispatcher()
 router = Router()
+dp.include_router(router)
 
-user_deals = {}  # Для отслеживания активных сделок и автоотмены
+user_deals = {}  # Активные сделки
 
+# Состояния FSM для управления админами
 class AdminManagementState(StatesGroup):
     add_admin = State()
 
@@ -63,6 +65,13 @@ async def create_deal_handler(message: Message):
     await bot.send_message(ADMIN_ID, f"📬 Новая сделка от <a href='tg://user?id={user_id}'>{user_id}</a>.")
     asyncio.create_task(auto_cancel_deal(user_id))
 
+@router.callback_query(F.data == "cancel_deal")
+async def cancel_deal_callback(callback: CallbackQuery):
+    user_id = callback.from_user.id
+    if user_id in user_deals:
+        del user_deals[user_id]
+        await callback.message.edit_text("❌ Сделка была отменена.")
+
 @router.message(F.text == "🎁 Получить приз")
 async def get_prize_handler(message: Message):
     await message.answer(
@@ -70,6 +79,23 @@ async def get_prize_handler(message: Message):
         reply_markup=main_menu(message.from_user.id)
     )
     await message.answer("Свяжитесь с администратором, чтобы забрать приз: @RaindropSpam_bot")
+
+@router.message(F.text == "💬 Отзывы")
+async def reviews_handler(message: Message):
+    await message.answer("📢 Отзывы о нашей работе можно посмотреть здесь:\nhttps://t.me/your_reviews_channel")
+
+@router.message(F.text == "🛡 Где я гарант?")
+async def where_guarantee_handler(message: Message):
+    await message.answer("🛡 Вы можете найти меня как гаранта здесь:\nhttps://t.me/your_guarantee_channel")
+
+@router.message(F.text == "👤 Личный кабинет")
+async def profile_handler(message: Message):
+    user_id = message.from_user.id
+    if user_id in user_deals:
+        deal_time = user_deals[user_id].strftime("%Y-%m-%d %H:%M:%S")
+        await message.answer(f"👤 Личный кабинет:\n\n📌 Активная сделка:\nСоздана: {deal_time}")
+    else:
+        await message.answer("👤 Личный кабинет:\n\nУ вас нет активных сделок.")
 
 @router.message(F.text == "🌐 Админ-панель")
 async def admin_panel_handler(message: Message):
@@ -81,19 +107,18 @@ async def admin_panel_handler(message: Message):
 
 @router.message(F.text == "📋 Список сделок")
 async def admin_deals_handler(message: Message):
-    user_id = message.from_user.id
-    if is_admin(user_id):
-        deals_list = "\n".join([f"{key}: {val}" for key, val in user_deals.items()])
+    if is_admin(message.from_user.id):
+        if user_deals:
+            deals_list = "\n".join([f"{key}: {val}" for key, val in user_deals.items()])
+        else:
+            deals_list = "Нет активных сделок."
         await message.answer(f"Список активных сделок:\n{deals_list}", reply_markup=admin_panel_menu())
 
 @router.message(F.text == "🛠 Управление админами")
 async def admin_management_handler(message: Message, state: FSMContext):
-    user_id = message.from_user.id
-    if is_admin(user_id):
+    if is_admin(message.from_user.id):
         await message.answer("Введите ID нового админа для добавления:", reply_markup=admin_panel_menu())
         await state.set_state(AdminManagementState.add_admin)
-    else:
-        await message.answer("У вас нет доступа к этой функции!")
 
 @router.message(AdminManagementState.add_admin)
 async def add_admin(message: Message, state: FSMContext):
@@ -110,13 +135,12 @@ async def back_to_menu(message: Message):
     await message.answer("Вы вернулись в главное меню", reply_markup=main_menu(message.from_user.id))
 
 async def auto_cancel_deal(user_id: int):
-    await asyncio.sleep(3600)  # 1 час
+    await asyncio.sleep(3600)
     if user_id in user_deals:
         del user_deals[user_id]
         await bot.send_message(user_id, "❌ Ваша сделка была отменена из-за бездействия.")
 
 async def main():
-    dp.include_router(router)
     await dp.start_polling(bot)
 
 if __name__ == "__main__":
