@@ -3,30 +3,22 @@ from aiogram import Bot, Dispatcher, F, Router, types
 from aiogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
 from aiogram.filters import CommandStart
 from aiogram.enums.parse_mode import ParseMode
-from aiohttp import web
 from datetime import datetime, timedelta
-import os
 
-TOKEN = os.getenv("7807213915:AAEkplZ9d3AXmbX6U11R2GoFPHPhLnspaus")  # Храним токен в переменной среды на Railway
-ADMIN_ID = 7620745738
-WEBHOOK_PATH = "/webhook"
-WEBHOOK_SECRET = "supersecret"  # придумай сам, любое слово
-APP_HOST = "0.0.0.0"
-APP_PORT = int(os.getenv("PORT", 8000))  # Railway задаёт PORT
+# Твой токен
+TOKEN = "7807213915:AAEkplZ9d3AXmbX6U11R2GoFPHPhLnspaus"
+ADMIN_ID = 7620745738  # замени на свой Telegram ID
 
 bot = Bot(token=TOKEN, parse_mode=ParseMode.HTML)
 dp = Dispatcher()
 router = Router()
 
-user_deals = {}
+user_deals = {}  # для отслеживания активных сделок и автоотмены
 
 def main_menu(user_id: int) -> InlineKeyboardMarkup:
     buttons = [
         [InlineKeyboardButton(text="🤝 Создать сделку", callback_data="create_deal")],
-        [InlineKeyboardButton(
-            text="🎁 Забрать приз",
-            url="https://t.me/virus_play_bot/app?startapp=inviteCodeuNWkBu8PylHXHXLO"
-        )],
+        [InlineKeyboardButton(text="🎁 Забрать приз", url="https://t.me/virus_play_bot/app?startapp=inviteCodeuNWkBu8PylHXHXLO")],
         [InlineKeyboardButton(text="💬 Отзывы", url="https://t.me/raindrop_reviews")],
         [InlineKeyboardButton(text="🛡 Где я гарант?", callback_data="guarantee_chats")],
         [InlineKeyboardButton(text="🛠 Поддержка", callback_data="support")],
@@ -63,7 +55,7 @@ async def cancel_deal_callback(callback: CallbackQuery):
     await bot.send_message(ADMIN_ID, f"⚠️ Сделка пользователя {user_id} была отменена.")
 
 async def auto_cancel_deal(user_id: int):
-    await asyncio.sleep(3600)
+    await asyncio.sleep(3600)  # 1 час
     if user_id in user_deals:
         del user_deals[user_id]
         try:
@@ -108,27 +100,8 @@ async def admin_panel(callback: CallbackQuery):
 
 dp.include_router(router)
 
-# --- Webhook setup ---
-async def on_startup(app):
-    await bot.set_webhook(f"https://{os.getenv('RAILWAY_STATIC_URL')}{WEBHOOK_PATH}", secret_token=WEBHOOK_SECRET)
-
-async def on_shutdown(app):
-    await bot.delete_webhook()
-
-async def handle_webhook(request):
-    if request.headers.get("X-Telegram-Bot-Api-Secret-Token") != WEBHOOK_SECRET:
-        return web.Response(status=403)
-    data = await request.json()
-    update = types.Update(**data)
-    await dp.feed_update(bot, update)
-    return web.Response()
-
-def setup_app():
-    app = web.Application()
-    app.router.add_post(WEBHOOK_PATH, handle_webhook)
-    app.on_startup.append(on_startup)
-    app.on_shutdown.append(on_shutdown)
-    return app
+async def main():
+    await dp.start_polling(bot)
 
 if __name__ == "__main__":
-    web.run_app(setup_app(), host=APP_HOST, port=APP_PORT)
+    asyncio.run(main())
