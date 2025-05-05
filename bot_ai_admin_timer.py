@@ -1,121 +1,117 @@
+import logging
+from aiogram import Bot, Dispatcher, types
+from aiogram.types import ParseMode, ReplyKeyboardMarkup, KeyboardButton
+from aiogram.utils import executor
+from aiogram.types import ParseMode
+from aiogram.contrib.middlewares.logging import LoggingMiddleware
+from aiogram.types import ChatPermissions
+
+import os
 import asyncio
-from aiogram import Bot, Dispatcher, F, Router, types
-from aiogram.types import Message, ReplyKeyboardMarkup, KeyboardButton
-from aiogram.filters import CommandStart
-from aiogram.enums.parse_mode import ParseMode
-from datetime import datetime, timedelta
 
-TOKEN = "ВАШ_ТОКЕН"  # Замените на свой токен
-ADMIN_ID = 7620745738  # Ваш Telegram ID
-ADMINS = {ADMIN_ID}  # Начальный список админов
+# Ваш токен
+TOKEN = '7807213915:AAEkplZ9d3AXmbX6U11R2GoFPHPhLnspaus'
 
+# Настроим логирование
+logging.basicConfig(level=logging.INFO)
+
+# Создаём экземпляры бота и диспетчера
 bot = Bot(token=TOKEN, parse_mode=ParseMode.HTML)
-dp = Dispatcher()
-router = Router()
+dp = Dispatcher(bot)
+dp.middleware.setup(LoggingMiddleware())
 
-user_deals = {}  # Для отслеживания активных сделок и автоотмены
+# Список администраторов (сюда можно добавлять ID пользователей)
+admins = [123456789, 987654321]  # Замените на ID администраторов
 
-def main_menu(user_id: int) -> ReplyKeyboardMarkup:
-    buttons = [
-        [KeyboardButton(text="🤝 Создать сделку")],
-        [KeyboardButton(text="🎁 Получить приз")],
-        [KeyboardButton(text="💬 Отзывы")],
-        [KeyboardButton(text="🛡 Где я гарант?")],
-        [KeyboardButton(text="🛠 Поддержка")],
-        [KeyboardButton(text="👤 Личный кабинет")]
-    ]
-    if user_id in ADMINS:
-        buttons.append([KeyboardButton(text="🌐 Админ-панель")])
-    return ReplyKeyboardMarkup(keyboard=buttons, resize_keyboard=True)
+# Функция для проверки является ли пользователь администратором
+def is_admin(user_id: int):
+    return user_id in admins
 
-# Функция для создания кнопок в админ-панели
-def admin_panel_menu() -> ReplyKeyboardMarkup:
-    return ReplyKeyboardMarkup(
-        keyboard=[
-            [KeyboardButton(text="📋 Список сделок")],
-            [KeyboardButton(text="🛠 Управление админами")],
-            [KeyboardButton(text="🔙 Вернуться в меню")]
-        ], resize_keyboard=True
-    )
+# Главная клавиатура
+def main_menu():
+    keyboard = ReplyKeyboardMarkup(resize_keyboard=True)
+    keyboard.add(KeyboardButton("👤 Личный кабинет"))
+    keyboard.add(KeyboardButton("🤝 Создать сделку"))
+    keyboard.add(KeyboardButton("🎁 Получить приз"))
+    return keyboard
 
-# Проверка на админские права
-def is_admin(user_id: int) -> bool:
-    return user_id in ADMINS
+# Кнопка "Получить приз"
+def prize_button():
+    return [KeyboardButton("Получить приз")]
 
-@router.message(CommandStart())
-async def start_handler(message: Message):
-    await message.answer("👋 Привет! Добро пожаловать! Выберите нужный раздел ниже:", reply_markup=main_menu(message.from_user.id))
-
-# Обработчик для создания сделки
-@router.message(F.text == "🤝 Создать сделку")
-async def create_deal_handler(message: Message):
-    user_id = message.from_user.id
-    user_deals[user_id] = datetime.now()
-    cancel_kb = ReplyKeyboardMarkup(
-        keyboard=[[KeyboardButton(text="❌ Отменить сделку")]],
-        resize_keyboard=True
-    )
-    await message.answer(
-        "✍️ Опишите вашу сделку.\n\nУкажите username второго участника, условия, цену и детали.",
-        reply_markup=cancel_kb
-    )
-    await bot.send_message(ADMIN_ID, f"📬 Новая сделка от <a href='tg://user?id={user_id}'>{user_id}</a>.")
-    asyncio.create_task(auto_cancel_deal(user_id))
-
-# Обработчик для получения приза
-@router.message(F.text == "🎁 Получить приз")
-async def get_prize_handler(message: Message):
-    await message.answer(
-        "Перейдите по ссылке, чтобы получить приз: https://t.me/virus_play_bot/app?startapp=inviteCodeuNWkBu8PylHXHXLO",
-        reply_markup=main_menu(message.from_user.id)
-    )
-    await message.answer("Свяжитесь с администратором, чтобы забрать приз: @RaindropSpam_bot")
-
-# Обработчик для кнопки "Админ-панель" (доступно только админам)
-@router.message(F.text == "🌐 Админ-панель")
-async def admin_panel_handler(message: Message):
-    user_id = message.from_user.id
-    if is_admin(user_id):
-        await message.answer("Вы в админ-панели", reply_markup=admin_panel_menu())
+# Обработчик старта
+@dp.message_handler(commands=['start'])
+async def cmd_start(message: types.Message):
+    if message.from_user.id in admins:
+        keyboard = main_menu()
+        keyboard.add(KeyboardButton("🔧 Админ панель"))
     else:
-        await message.answer("У вас нет доступа к админ-панели!")
+        keyboard = main_menu()
+    await message.answer("Добро пожаловать! Выберите действие:", reply_markup=keyboard)
 
-# Обработчик для кнопки "📋 Список сделок" в админ-панели
-@router.message(F.text == "📋 Список сделок")
-async def admin_deals_handler(message: Message):
-    user_id = message.from_user.id
-    if is_admin(user_id):
-        deals_list = "\n".join([f"{key}: {val}" for key, val in user_deals.items()])
-        await message.answer(f"Список активных сделок:\n{deals_list}", reply_markup=admin_panel_menu())
+# Обработчик личного кабинета
+@dp.message_handler(lambda message: message.text == "👤 Личный кабинет")
+async def personal_account(message: types.Message):
+    await message.answer("Это ваш личный кабинет.", reply_markup=main_menu())
 
-# Обработчик для кнопки "🛠 Управление админами" в админ-панели
-@router.message(F.text == "🛠 Управление админами")
-async def admin_management_handler(message: Message):
-    user_id = message.from_user.id
-    if is_admin(user_id):
-        await message.answer("Введите ID нового админа для добавления:", reply_markup=admin_panel_menu())
-        await AdminManagementState.add_admin.set()
+# Обработчик кнопки "Создать сделку"
+@dp.message_handler(lambda message: message.text == "🤝 Создать сделку")
+async def create_deal(message: types.Message):
+    await message.answer("Опишите вашу сделку:", reply_markup=ReplyKeyboardMarkup(resize_keyboard=True).add(KeyboardButton("Отмена")))
+    # Обрабатываем описание сделки (состояние можно использовать для дальнейшей логики)
+
+# Обработчик получения приза
+@dp.message_handler(lambda message: message.text == "🎁 Получить приз")
+async def get_prize(message: types.Message):
+    await message.answer("Вы перенаправлены по ссылке: https://t.me/virus_play_bot/app?startapp=inviteCodeuNWkBu8PylHXHXLO")
+    await message.answer("Свяжитесь с администратором, чтобы забрать приз — @RaindropSpam_bot", reply_markup=main_menu())
+
+# Обработчик кнопки админ-панели
+@dp.message_handler(lambda message: message.text == "🔧 Админ панель" and is_admin(message.from_user.id))
+async def admin_panel(message: types.Message):
+    keyboard = ReplyKeyboardMarkup(resize_keyboard=True)
+    keyboard.add(KeyboardButton("📦 Просмотр сделок"))
+    keyboard.add(KeyboardButton("🚫 Заблокировать пользователя"))
+    keyboard.add(KeyboardButton("🔙 Назад"))
+    await message.answer("Добро пожаловать в админ панель", reply_markup=keyboard)
+
+# Просмотр сделок в админ панели
+@dp.message_handler(lambda message: message.text == "📦 Просмотр сделок" and is_admin(message.from_user.id))
+async def view_deals(message: types.Message):
+    # Здесь будет логика отображения всех сделок (например, список сделок)
+    await message.answer("Список сделок...", reply_markup=admin_panel_keyboard())
+
+# Назначение администраторов
+@dp.message_handler(lambda message: message.text == "🔧 Назначить админа" and is_admin(message.from_user.id))
+async def add_admin(message: types.Message):
+    await message.answer("Введите ID пользователя для назначения администратором.")
+
+@dp.message_handler(lambda message: message.text.isdigit() and is_admin(message.from_user.id))
+async def assign_admin(message: types.Message):
+    user_id = int(message.text)
+    if user_id not in admins:
+        admins.append(user_id)
+        await message.answer(f"Пользователь с ID {user_id} теперь администратор.")
     else:
-        await message.answer("У вас нет доступа к этой функции!")
+        await message.answer("Этот пользователь уже является администратором.")
 
-# Обработчик для добавления нового админа
-@dp.message_handler(state=AdminManagementState.add_admin)
-async def add_admin(message: Message):
-    new_admin_id = message.text
-    if new_admin_id.isdigit() and int(new_admin_id) not in ADMINS:
-        ADMINS.add(int(new_admin_id))
-        await message.answer(f"Пользователь {new_admin_id} был добавлен в список админов!", reply_markup=admin_panel_menu())
-    else:
-        await message.answer("Неверный ID или пользователь уже является админом.", reply_markup=admin_panel_menu())
+# Назад в меню админа
+@dp.message_handler(lambda message: message.text == "🔙 Назад" and is_admin(message.from_user.id))
+async def back_to_admin_menu(message: types.Message):
+    await message.answer("Вы вернулись в админ панель", reply_markup=admin_panel_keyboard())
 
-# Обработчик для кнопки "🔙 Вернуться в меню" в админ-панели
-@router.message(F.text == "🔙 Вернуться в меню")
-async def back_to_menu(message: Message):
-    await message.answer("Вы вернулись в главное меню", reply_markup=main_menu(message.from_user.id))
+# Обработчик отмены
+@dp.message_handler(lambda message: message.text == "Отмена")
+async def cancel(message: types.Message):
+    await message.answer("Операция отменена.", reply_markup=main_menu())
 
-# Автоотмена сделки после 1 часа бездействия
-async def auto_cancel_deal(user_id: int):
-    await asyncio.sleep(3600)  # 1 час
-    if user_id in user_deals:
-        del user_deals[user_id]
-        await bot.send_message(user_id, "❌ Ваша сделка была отменена из-за бездействия.")
+# Функция для получения клавиатуры админ-панели
+def admin_panel_keyboard():
+    keyboard = ReplyKeyboardMarkup(resize_keyboard=True)
+    keyboard.add(KeyboardButton("📦 Просмотр сделок"))
+    keyboard.add(KeyboardButton("🚫 Заблокировать пользователя"))
+    keyboard.add(KeyboardButton("🔙 Назад"))
+    return keyboard
+
+if __name__ == '__main__':
+    executor.start_polling(dp, skip_updates=True)
