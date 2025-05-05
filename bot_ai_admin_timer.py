@@ -1,7 +1,6 @@
 import logging
 from aiogram import Bot, Dispatcher, types
 from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
-from aiogram.contrib.middlewares.logging import LoggingMiddleware
 from aiogram.utils import executor
 import os
 
@@ -10,12 +9,12 @@ TOKEN = '7807213915:AAEkplZ9d3AXmbX6U11R2GoFPHPhLnspaus'
 ADMIN_ID = 'ВАШ_ID'  # Замените на свой ID
 admins = [ADMIN_ID]
 
+# Настройка логирования
 logging.basicConfig(level=logging.INFO)
 
 # Инициализация бота
 bot = Bot(token=TOKEN)
 dp = Dispatcher(bot)
-dp.middleware.setup(LoggingMiddleware())
 
 # Клавиатура
 keyboard = ReplyKeyboardMarkup(resize_keyboard=True)
