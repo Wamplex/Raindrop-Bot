@@ -1,112 +1,134 @@
+import asyncio
 from aiogram import Bot, Dispatcher, F, Router, types
 from aiogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
 from aiogram.filters import CommandStart
-import asyncio
+from aiogram.enums.parse_mode import ParseMode
+from aiohttp import web
 from datetime import datetime, timedelta
+import os
 
-TOKEN = "7807213915:AAGGA7EDq-e_8uUnpKfg4ZhUe-KfJfXKvUY"
+TOKEN = os.getenv("7807213915:AAEkplZ9d3AXmbX6U11R2GoFPHPhLnspaus")  # Храним токен в переменной среды на Railway
 ADMIN_ID = 7620745738
+WEBHOOK_PATH = "/webhook"
+WEBHOOK_SECRET = "supersecret"  # придумай сам, любое слово
+APP_HOST = "0.0.0.0"
+APP_PORT = int(os.getenv("PORT", 8000))  # Railway задаёт PORT
 
-bot = Bot(token=TOKEN)
+bot = Bot(token=TOKEN, parse_mode=ParseMode.HTML)
 dp = Dispatcher()
 router = Router()
 
-# Хранилище активных сделок (user_id: datetime создания)
-active_deals = {}
+user_deals = {}
 
-# Главное меню
-def main_menu(is_admin=False):
+def main_menu(user_id: int) -> InlineKeyboardMarkup:
     buttons = [
         [InlineKeyboardButton(text="🤝 Создать сделку", callback_data="create_deal")],
-        [InlineKeyboardButton(text="🎁 Забрать приз", url="https://link_to_prize")],
+        [InlineKeyboardButton(
+            text="🎁 Забрать приз",
+            url="https://t.me/virus_play_bot/app?startapp=inviteCodeuNWkBu8PylHXHXLO"
+        )],
         [InlineKeyboardButton(text="💬 Отзывы", url="https://t.me/raindrop_reviews")],
         [InlineKeyboardButton(text="🛡 Где я гарант?", callback_data="guarantee_chats")],
         [InlineKeyboardButton(text="🛠 Поддержка", callback_data="support")],
-        [InlineKeyboardButton(text="👤 Личный кабинет", callback_data="profile")],
+        [InlineKeyboardButton(text="👤 Личный кабинет", callback_data="profile")]
     ]
-    if is_admin:
+    if user_id == ADMIN_ID:
         buttons.append([InlineKeyboardButton(text="🌐 Админ-панель", callback_data="admin")])
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 @router.message(CommandStart())
 async def start_handler(message: Message):
-    await message.answer("Добро пожаловать! Используйте кнопки ниже для взаимодействия с ботом.", 
-                         reply_markup=main_menu(is_admin=(message.from_user.id == ADMIN_ID)))
+    await message.answer("👋 Привет! Добро пожаловать! Выберите нужный раздел ниже:", reply_markup=main_menu(message.from_user.id))
 
 @router.callback_query(F.data == "create_deal")
 async def create_deal_callback(callback: CallbackQuery):
     user_id = callback.from_user.id
-    active_deals[user_id] = datetime.now()
-    cancel_button = InlineKeyboardMarkup(inline_keyboard=[
+    user_deals[user_id] = datetime.now()
+    cancel_kb = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="❌ Отменить сделку", callback_data="cancel_deal")]
     ])
     await callback.message.edit_text(
-        "Опишите вашу сделку.\nУкажите username второго участника, товары, цену и условия.",
-        reply_markup=cancel_button
+        "✍️ Опишите вашу сделку.\n\nУкажите username второго участника, условия, цену и детали.",
+        reply_markup=cancel_kb
     )
-    await notify_admin(f"Новая сделка от @{callback.from_user.username or 'пользователь без username'}!")
+    await bot.send_message(ADMIN_ID, f"📬 Новая сделка от <a href='tg://user?id={user_id}'>{user_id}</a>.")
+    asyncio.create_task(auto_cancel_deal(user_id))
 
 @router.callback_query(F.data == "cancel_deal")
 async def cancel_deal_callback(callback: CallbackQuery):
     user_id = callback.from_user.id
-    active_deals.pop(user_id, None)
-    await callback.message.edit_text("Сделка отменена.", reply_markup=main_menu(is_admin=(user_id == ADMIN_ID)))
+    if user_id in user_deals:
+        del user_deals[user_id]
+    await callback.message.edit_text("❌ Сделка отменена.")
+    await bot.send_message(ADMIN_ID, f"⚠️ Сделка пользователя {user_id} была отменена.")
+
+async def auto_cancel_deal(user_id: int):
+    await asyncio.sleep(3600)
+    if user_id in user_deals:
+        del user_deals[user_id]
+        try:
+            await bot.send_message(user_id, "⏳ Сделка отменена из-за бездействия.")
+            await bot.send_message(ADMIN_ID, f"⌛ Сделка пользователя {user_id} была автоотменена.")
+        except:
+            pass
 
 @router.callback_query(F.data == "guarantee_chats")
 async def guarantee_chats_callback(callback: CallbackQuery):
-    text = "📌 Где я гарант?\n\n" \
-           "Чат 1: https://t.me/naytixa\n" \
-           "Чат 2: https://t.me/ChatFischS\n" \
-           "Чат 3: https://t.me/fischtradeschat"
-    await callback.message.edit_text(text)
+    await callback.message.edit_text(
+        "🛡 Где я гарант?\n\n"
+        "Чат 1: https://t.me/naytixa\n"
+        "Чат 2: https://t.me/ChatFischS\n"
+        "Чат 3: https://t.me/fischtradeschat"
+    )
 
 @router.callback_query(F.data == "support")
 async def support_callback(callback: CallbackQuery):
-    await callback.message.edit_text("Напишите ваш вопрос. Администратор скоро свяжется с вами.")
-    await notify_admin(f"🛠 Обращение в поддержку от @{callback.from_user.username or 'пользователь без username'}")
+    await callback.message.edit_text("✉️ Напишите ваш вопрос. Админ скоро свяжется с вами.")
+    await bot.send_message(ADMIN_ID, f"📩 Новый вопрос от <a href='tg://user?id={callback.from_user.id}'>{callback.from_user.id}</a>.")
 
 @router.callback_query(F.data == "profile")
 async def profile_callback(callback: CallbackQuery):
-    await callback.message.edit_text(f"👤 Ваш ID: {callback.from_user.id}\n📦 Кол-во сделок: 0")
+    await callback.message.edit_text(
+        f"👤 Ваш ID: <code>{callback.from_user.id}</code>\n"
+        f"📦 Количество сделок: 0"
+    )
 
 @router.callback_query(F.data == "admin")
-async def admin_callback(callback: CallbackQuery):
+async def admin_panel(callback: CallbackQuery):
     if callback.from_user.id != ADMIN_ID:
         return
-    text = (
-        "🌐 Админ-панель:\n\n"
-        "1. Сделать рассылку\n"
-        "2. Посмотреть активных пользователей\n"
-        "3. Ответить на обращение\n"
-        "4. Изменить кнопки меню\n"
-        "5. Настройки бота"
+    await callback.message.edit_text(
+        "🌐 <b>Админ-панель</b>\n\n"
+        "1. 🔊 Сделать рассылку\n"
+        "2. 📊 Активные пользователи\n"
+        "3. 📥 Ответить на обращение\n"
+        "4. ⚙️ Изменить кнопки меню\n"
+        "5. 🛠 Настройки бота"
     )
-    await callback.message.edit_text(text)
-
-# Проверка сделок на автоотмену
-async def deal_timeout_checker():
-    while True:
-        now = datetime.now()
-        expired_users = [user for user, time in active_deals.items() if now - time > timedelta(hours=1)]
-        for user in expired_users:
-            try:
-                await bot.send_message(user, "⏳ Сделка отменена из-за бездействия.")
-            except:
-                pass
-            active_deals.pop(user, None)
-        await asyncio.sleep(60)
-
-async def notify_admin(text: str):
-    try:
-        await bot.send_message(ADMIN_ID, text)
-    except:
-        pass
 
 dp.include_router(router)
 
-async def main():
-    asyncio.create_task(deal_timeout_checker())
-    await dp.start_polling(bot)
+# --- Webhook setup ---
+async def on_startup(app):
+    await bot.set_webhook(f"https://{os.getenv('RAILWAY_STATIC_URL')}{WEBHOOK_PATH}", secret_token=WEBHOOK_SECRET)
+
+async def on_shutdown(app):
+    await bot.delete_webhook()
+
+async def handle_webhook(request):
+    if request.headers.get("X-Telegram-Bot-Api-Secret-Token") != WEBHOOK_SECRET:
+        return web.Response(status=403)
+    data = await request.json()
+    update = types.Update(**data)
+    await dp.feed_update(bot, update)
+    return web.Response()
+
+def setup_app():
+    app = web.Application()
+    app.router.add_post(WEBHOOK_PATH, handle_webhook)
+    app.on_startup.append(on_startup)
+    app.on_shutdown.append(on_shutdown)
+    return app
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    web.run_app(setup_app(), host=APP_HOST, port=APP_PORT)
