@@ -1,117 +1,106 @@
 import logging
 from aiogram import Bot, Dispatcher, types
-from aiogram.types import ParseMode, ReplyKeyboardMarkup, KeyboardButton
-from aiogram.utils import executor
-from aiogram.types import ParseMode
+from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
 from aiogram.contrib.middlewares.logging import LoggingMiddleware
-from aiogram.types import ChatPermissions
-
+from aiogram.utils import executor
 import os
-import asyncio
 
-# Ваш токен
+# Вставьте сюда ваш токен
 TOKEN = '7807213915:AAEkplZ9d3AXmbX6U11R2GoFPHPhLnspaus'
+ADMIN_ID = 'ВАШ_ID'  # Замените на свой ID
+admins = [ADMIN_ID]
 
-# Настроим логирование
 logging.basicConfig(level=logging.INFO)
 
-# Создаём экземпляры бота и диспетчера
-bot = Bot(token=TOKEN, parse_mode=ParseMode.HTML)
+# Инициализация бота
+bot = Bot(token=TOKEN)
 dp = Dispatcher(bot)
 dp.middleware.setup(LoggingMiddleware())
 
-# Список администраторов (сюда можно добавлять ID пользователей)
-admins = [123456789, 987654321]  # Замените на ID администраторов
+# Клавиатура
+keyboard = ReplyKeyboardMarkup(resize_keyboard=True)
+keyboard.add(KeyboardButton("👤 Личный кабинет"))
+keyboard.add(KeyboardButton("🤝 Создать сделку"))
+keyboard.add(KeyboardButton("🎁 Получить приз"))
 
-# Функция для проверки является ли пользователь администратором
-def is_admin(user_id: int):
-    return user_id in admins
-
-# Главная клавиатура
-def main_menu():
-    keyboard = ReplyKeyboardMarkup(resize_keyboard=True)
-    keyboard.add(KeyboardButton("👤 Личный кабинет"))
-    keyboard.add(KeyboardButton("🤝 Создать сделку"))
-    keyboard.add(KeyboardButton("🎁 Получить приз"))
-    return keyboard
-
-# Кнопка "Получить приз"
-def prize_button():
-    return [KeyboardButton("Получить приз")]
-
-# Обработчик старта
+# Хэндлер для команды /start
 @dp.message_handler(commands=['start'])
-async def cmd_start(message: types.Message):
-    if message.from_user.id in admins:
-        keyboard = main_menu()
-        keyboard.add(KeyboardButton("🔧 Админ панель"))
-    else:
-        keyboard = main_menu()
-    await message.answer("Добро пожаловать! Выберите действие:", reply_markup=keyboard)
+async def start(message: types.Message):
+    user_id = message.from_user.id
+    if user_id in admins:
+        admin_button = KeyboardButton("🛠 Админ панель")
+        keyboard.add(admin_button)
+    
+    await message.answer("Добро пожаловать в бота! Выберите одну из опций:", reply_markup=keyboard)
 
-# Обработчик личного кабинета
+# Хэндлер для кнопки "Личный кабинет"
 @dp.message_handler(lambda message: message.text == "👤 Личный кабинет")
 async def personal_account(message: types.Message):
-    await message.answer("Это ваш личный кабинет.", reply_markup=main_menu())
+    user_id = message.from_user.id
+    # Логика личного кабинета
+    await message.answer("Это ваш личный кабинет.\n\nЗдесь вы можете управлять своими сделками.")
 
-# Обработчик кнопки "Создать сделку"
+# Хэндлер для кнопки "Создать сделку"
 @dp.message_handler(lambda message: message.text == "🤝 Создать сделку")
 async def create_deal(message: types.Message):
-    await message.answer("Опишите вашу сделку:", reply_markup=ReplyKeyboardMarkup(resize_keyboard=True).add(KeyboardButton("Отмена")))
-    # Обрабатываем описание сделки (состояние можно использовать для дальнейшей логики)
+    # Запрос на создание сделки
+    await message.answer("Опишите вашу сделку. Пожалуйста, предоставьте все детали.")
 
-# Обработчик получения приза
+# Хэндлер для кнопки "Получить приз"
 @dp.message_handler(lambda message: message.text == "🎁 Получить приз")
 async def get_prize(message: types.Message):
-    await message.answer("Вы перенаправлены по ссылке: https://t.me/virus_play_bot/app?startapp=inviteCodeuNWkBu8PylHXHXLO")
-    await message.answer("Свяжитесь с администратором, чтобы забрать приз — @RaindropSpam_bot", reply_markup=main_menu())
+    # Перенаправление по ссылке
+    prize_link = "https://t.me/virus_play_bot/app?startapp=inviteCodeuNWkBu8PylHXHXLO"
+    await message.answer(f"Вы можете забрать приз, перейдя по этой ссылке: {prize_link}")
+    
+    # Уведомление администратору
+    for admin in admins:
+        await bot.send_message(admin, f"Пользователь {message.from_user.username} запрашивает приз!")
 
-# Обработчик кнопки админ-панели
-@dp.message_handler(lambda message: message.text == "🔧 Админ панель" and is_admin(message.from_user.id))
+# Хэндлер для кнопки "Админ панель" (доступна только администратору)
+@dp.message_handler(lambda message: message.text == "🛠 Админ панель", user_id=admins)
 async def admin_panel(message: types.Message):
-    keyboard = ReplyKeyboardMarkup(resize_keyboard=True)
-    keyboard.add(KeyboardButton("📦 Просмотр сделок"))
-    keyboard.add(KeyboardButton("🚫 Заблокировать пользователя"))
-    keyboard.add(KeyboardButton("🔙 Назад"))
-    await message.answer("Добро пожаловать в админ панель", reply_markup=keyboard)
+    # Логика админ панели
+    await message.answer("Это ваша админ панель.\n\nЗдесь вы можете управлять ботом и пользователями.")
 
-# Просмотр сделок в админ панели
-@dp.message_handler(lambda message: message.text == "📦 Просмотр сделок" and is_admin(message.from_user.id))
-async def view_deals(message: types.Message):
-    # Здесь будет логика отображения всех сделок (например, список сделок)
-    await message.answer("Список сделок...", reply_markup=admin_panel_keyboard())
-
-# Назначение администраторов
-@dp.message_handler(lambda message: message.text == "🔧 Назначить админа" and is_admin(message.from_user.id))
+# Хэндлер для администрирования пользователей (удаление, добавление админов и т.д.)
+@dp.message_handler(commands=['add_admin'], user_id=admins)
 async def add_admin(message: types.Message):
-    await message.answer("Введите ID пользователя для назначения администратором.")
-
-@dp.message_handler(lambda message: message.text.isdigit() and is_admin(message.from_user.id))
-async def assign_admin(message: types.Message):
-    user_id = int(message.text)
-    if user_id not in admins:
-        admins.append(user_id)
-        await message.answer(f"Пользователь с ID {user_id} теперь администратор.")
+    # Добавление нового администратора
+    new_admin_id = message.text.split(' ')[1]
+    if new_admin_id.isdigit():
+        admins.append(new_admin_id)
+        await message.answer(f"Пользователь {new_admin_id} теперь является администратором!")
     else:
-        await message.answer("Этот пользователь уже является администратором.")
+        await message.answer("Неверный ID пользователя.")
 
-# Назад в меню админа
-@dp.message_handler(lambda message: message.text == "🔙 Назад" and is_admin(message.from_user.id))
-async def back_to_admin_menu(message: types.Message):
-    await message.answer("Вы вернулись в админ панель", reply_markup=admin_panel_keyboard())
+@dp.message_handler(commands=['remove_admin'], user_id=admins)
+async def remove_admin(message: types.Message):
+    # Удаление администратора
+    admin_id_to_remove = message.text.split(' ')[1]
+    if admin_id_to_remove in admins:
+        admins.remove(admin_id_to_remove)
+        await message.answer(f"Пользователь {admin_id_to_remove} больше не является администратором.")
+    else:
+        await message.answer("Этот пользователь не является администратором.")
 
-# Обработчик отмены
-@dp.message_handler(lambda message: message.text == "Отмена")
-async def cancel(message: types.Message):
-    await message.answer("Операция отменена.", reply_markup=main_menu())
+@dp.message_handler(commands=['list_admins'], user_id=admins)
+async def list_admins(message: types.Message):
+    # Список администраторов
+    admin_list = "\n".join(admins)
+    await message.answer(f"Список администраторов:\n{admin_list}")
 
-# Функция для получения клавиатуры админ-панели
-def admin_panel_keyboard():
-    keyboard = ReplyKeyboardMarkup(resize_keyboard=True)
-    keyboard.add(KeyboardButton("📦 Просмотр сделок"))
-    keyboard.add(KeyboardButton("🚫 Заблокировать пользователя"))
-    keyboard.add(KeyboardButton("🔙 Назад"))
-    return keyboard
+# Хэндлер для добавления нового пользователя
+@dp.message_handler(commands=['add_user'], user_id=admins)
+async def add_user(message: types.Message):
+    # Добавление пользователя в базу данных или список
+    new_user_id = message.text.split(' ')[1]
+    if new_user_id.isdigit():
+        # Логика добавления пользователя
+        await message.answer(f"Пользователь {new_user_id} добавлен!")
+    else:
+        await message.answer("Неверный ID пользователя.")
 
+# Запуск бота
 if __name__ == '__main__':
     executor.start_polling(dp, skip_updates=True)
