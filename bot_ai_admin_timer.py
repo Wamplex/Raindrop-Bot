@@ -99,6 +99,8 @@ async def admin_panel(callback: CallbackQuery):
 
 dp.include_router(router)
 
+print("🔥 Этот код точно запустился!")
+
 async def main():
     await dp.start_polling(bot)
 
