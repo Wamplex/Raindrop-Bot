@@ -85,7 +85,7 @@ async def admin_panel_handler(message: Message):
 async def admin_deals_handler(message: Message):
     if is_admin(message.from_user.id):
         deals_list = "\n".join([f"{k}: {v}" for k, v in user_deals.items()]) or "Сделок нет"
-        await message.answer(f"Список:
+        await message.answer(f"Список":
 {deals_list}", reply_markup=admin_panel_menu())
 
 @router.message(F.text == "🛠 Управление админами")
