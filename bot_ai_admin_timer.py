@@ -3,9 +3,9 @@ from aiogram import Bot, Dispatcher, F, Router, types
 from aiogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery, ReplyKeyboardMarkup, KeyboardButton
 from aiogram.filters import CommandStart
 from aiogram.enums.parse_mode import ParseMode
+from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.context import FSMContext
-from aiogram.fsm.state import StatesGroup, State
-from datetime import datetime
+from datetime import datetime, timedelta
 
 TOKEN = "7807213915:AAEkplZ9d3AXmbX6U11R2GoFPHPhLnspaus"
 ADMIN_ID = 7620745738
@@ -16,9 +16,11 @@ dp = Dispatcher()
 router = Router()
 
 user_deals = {}
+user_data = set()  # Список всех, кто запускал бота
 
 class AdminManagementState(StatesGroup):
     add_admin = State()
+    broadcast = State()
 
 def main_menu(user_id: int) -> ReplyKeyboardMarkup:
     buttons = [
@@ -38,6 +40,7 @@ def admin_panel_menu() -> ReplyKeyboardMarkup:
         keyboard=[
             [KeyboardButton(text="📋 Список сделок")],
             [KeyboardButton(text="🛠 Управление админами")],
+            [KeyboardButton(text="📢 Массовая рассылка")],
             [KeyboardButton(text="🔙 Вернуться в меню")]
         ], resize_keyboard=True
     )
@@ -47,6 +50,7 @@ def is_admin(user_id: int) -> bool:
 
 @router.message(CommandStart())
 async def start_handler(message: Message):
+    user_data.add(message.from_user.id)
     await message.answer("👋 Привет! Добро пожаловать! Выберите нужный раздел ниже:", reply_markup=main_menu(message.from_user.id))
 
 @router.message(F.text == "🤝 Создать сделку")
@@ -63,40 +67,30 @@ async def create_deal_handler(message: Message):
     await bot.send_message(ADMIN_ID, f"📬 Новая сделка от <a href='tg://user?id={user_id}'>{user_id}</a>.")
     asyncio.create_task(auto_cancel_deal(user_id))
 
-@router.callback_query(F.data == "cancel_deal")
-async def cancel_deal(callback: CallbackQuery):
-    user_id = callback.from_user.id
-    if user_id in user_deals:
-        del user_deals[user_id]
-        await callback.message.edit_text("❌ Сделка отменена.")
-
 @router.message(F.text == "🎁 Получить приз")
 async def get_prize_handler(message: Message):
     await message.answer(
-        "Перейдите по ссылке, чтобы получить приз: https://t.me/virus_play_bot/app?startapp=inviteCodeuNWkBu8PylHXHXLO"
+        "Перейдите по ссылке, чтобы получить приз: https://t.me/virus_play_bot/app?startapp=inviteCodeuNWkBu8PylHXHXLO",
+        reply_markup=main_menu(message.from_user.id)
     )
     await message.answer("Свяжитесь с администратором, чтобы забрать приз: @RaindropSpam_bot")
 
 @router.message(F.text == "💬 Отзывы")
 async def reviews_handler(message: Message):
-    await message.answer("💬 Отзывы: https://t.me/raindrop_reviews")
+    await message.answer("Отзывы доступны здесь: https://t.me/raindrop_reviews")
 
 @router.message(F.text == "🛡 Где я гарант?")
 async def guarantee_handler(message: Message):
     await message.answer(
-        "Чаты в которых я гарант:\n"
-        "Чат 1: https://t.me/naytixa\n"
-        "Чат 2: https://t.me/ChatFischS\n"
-        "Чат 3: https://t.me/fischtradeschat"
+        "Чаты в которых я гарант:\nЧат 1: https://t.me/naytixa\nЧат 2: https://t.me/ChatFischS\nЧат 3: https://t.me/fischtradeschat"
     )
 
 @router.message(F.text == "👤 Личный кабинет")
 async def profile_handler(message: Message):
-    await message.answer("👤 Личный кабинет в разработке.")
-
-@router.message(F.text == "🛠 Поддержка")
-async def support_handler(message: Message):
-    await message.answer("Связь с поддержкой: @RaindropSpam_bot")
+    user_id = message.from_user.id
+    active = user_deals.get(user_id)
+    reg_date = "Неизвестно"
+    await message.answer(f"👤 Ваш профиль:\n🆔 ID: {user_id}\n📝 Сделка активна: {'Да' if active else 'Нет'}")
 
 @router.message(F.text == "🌐 Админ-панель")
 async def admin_panel_handler(message: Message):
@@ -110,14 +104,14 @@ async def admin_deals_handler(message: Message):
     if is_admin(message.from_user.id):
         if user_deals:
             deals_list = "\n".join([f"{key}: {val}" for key, val in user_deals.items()])
+            await message.answer(f"Список активных сделок:\n{deals_list}", reply_markup=admin_panel_menu())
         else:
-            deals_list = "Нет активных сделок."
-        await message.answer(f"Список активных сделок:\n{deals_list}", reply_markup=admin_panel_menu())
+            await message.answer("Нет активных сделок.", reply_markup=admin_panel_menu())
 
 @router.message(F.text == "🛠 Управление админами")
 async def admin_management_handler(message: Message, state: FSMContext):
     if is_admin(message.from_user.id):
-        await message.answer("Введите ID нового админа для добавления:", reply_markup=admin_panel_menu())
+        await message.answer("Введите ID нового админа:", reply_markup=admin_panel_menu())
         await state.set_state(AdminManagementState.add_admin)
     else:
         await message.answer("У вас нет доступа к этой функции!")
@@ -125,11 +119,33 @@ async def admin_management_handler(message: Message, state: FSMContext):
 @router.message(AdminManagementState.add_admin)
 async def add_admin(message: Message, state: FSMContext):
     new_admin_id = message.text
-    if new_admin_id.isdigit() and int(new_admin_id) not in ADMINS:
-        ADMINS.add(int(new_admin_id))
-        await message.answer(f"Пользователь {new_admin_id} был добавлен в список админов!", reply_markup=admin_panel_menu())
+    if new_admin_id.isdigit():
+        new_admin_id = int(new_admin_id)
+        if new_admin_id not in ADMINS:
+            ADMINS.add(new_admin_id)
+            await message.answer(f"Пользователь {new_admin_id} добавлен в админы.", reply_markup=admin_panel_menu())
+        else:
+            await message.answer("Пользователь уже является админом.", reply_markup=admin_panel_menu())
     else:
-        await message.answer("Неверный ID или пользователь уже является админом.", reply_markup=admin_panel_menu())
+        await message.answer("Неверный ID.", reply_markup=admin_panel_menu())
+    await state.clear()
+
+@router.message(F.text == "📢 Массовая рассылка")
+async def broadcast_handler(message: Message, state: FSMContext):
+    if is_admin(message.from_user.id):
+        await message.answer("Введите текст для рассылки всем пользователям:")
+        await state.set_state(AdminManagementState.broadcast)
+
+@router.message(AdminManagementState.broadcast)
+async def do_broadcast(message: Message, state: FSMContext):
+    sent, failed = 0, 0
+    for uid in user_data:
+        try:
+            await bot.send_message(uid, message.text)
+            sent += 1
+        except:
+            failed += 1
+    await message.answer(f"Рассылка завершена. ✅ Отправлено: {sent}, ❌ Ошибок: {failed}", reply_markup=admin_panel_menu())
     await state.clear()
 
 @router.message(F.text == "🔙 Вернуться в меню")
@@ -148,4 +164,5 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
+
 
