@@ -1,11 +1,11 @@
 import asyncio
 from aiogram import Bot, Dispatcher, F, Router, types
-from aiogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery, ReplyKeyboardMarkup, KeyboardButton
+from aiogram.types import Message, ReplyKeyboardMarkup, KeyboardButton
 from aiogram.filters import CommandStart
 from aiogram.enums.parse_mode import ParseMode
 from datetime import datetime, timedelta
 
-TOKEN = "7807213915:AAEkplZ9d3AXmbX6U11R2GoFPHPhLnspaus"  # Замените на свой токен
+TOKEN = "ВАШ_ТОКЕН"  # Замените на свой токен
 ADMIN_ID = 7620745738  # Ваш Telegram ID
 ADMINS = {ADMIN_ID}  # Начальный список админов
 
@@ -51,9 +51,10 @@ async def start_handler(message: Message):
 async def create_deal_handler(message: Message):
     user_id = message.from_user.id
     user_deals[user_id] = datetime.now()
-    cancel_kb = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="❌ Отменить сделку", callback_data="cancel_deal")]
-    ])
+    cancel_kb = ReplyKeyboardMarkup(
+        keyboard=[[KeyboardButton(text="❌ Отменить сделку")]],
+        resize_keyboard=True
+    )
     await message.answer(
         "✍️ Опишите вашу сделку.\n\nУкажите username второго участника, условия, цену и детали.",
         reply_markup=cancel_kb
