@@ -82,7 +82,7 @@ async def reviews_handler(message: Message):
 @router.message(F.text == "🛡 Где я гарант?")
 async def guarantee_handler(message: Message):
     await message.answer(
-        "Чаты в которых я гарант:\nЧат 1: https://t.me/naytixa\nЧат 2: https://t.me/ChatFischS\nЧат 3: https://t.me/fischtradeschat\n Чат 4: https://t.me/ChatFischS"
+        "Чаты в которых я гарант:\nЧат 1: https://t.me/naytixa\nЧат 2: https://t.me/ChatFischS\nЧат 3: https://t.me/fischtradeschat\nЧат 4: https://t.me/ChatFischS"
     )
 
 @router.message(F.text == "👤 Личный кабинет")
