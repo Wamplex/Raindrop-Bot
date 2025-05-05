@@ -1,8 +1,10 @@
 import asyncio
 from aiogram import Bot, Dispatcher, F, Router, types
-from aiogram.types import Message, ReplyKeyboardMarkup, KeyboardButton
+from aiogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery, ReplyKeyboardMarkup, KeyboardButton
 from aiogram.filters import CommandStart
-from aiogram.enums.parse_mode import ParseMode
+from aiogram.enums import ParseMode
+from aiogram.fsm.context import FSMContext
+from aiogram.fsm.state import State, StatesGroup
 from datetime import datetime, timedelta
 
 TOKEN = "7807213915:AAEkplZ9d3AXmbX6U11R2GoFPHPhLnspaus"  # Замените на свой токен
@@ -14,6 +16,9 @@ dp = Dispatcher()
 router = Router()
 
 user_deals = {}  # Для отслеживания активных сделок и автоотмены
+
+class AdminManagementState(StatesGroup):
+    add_admin = State()
 
 def main_menu(user_id: int) -> ReplyKeyboardMarkup:
     buttons = [
@@ -28,7 +33,6 @@ def main_menu(user_id: int) -> ReplyKeyboardMarkup:
         buttons.append([KeyboardButton(text="🌐 Админ-панель")])
     return ReplyKeyboardMarkup(keyboard=buttons, resize_keyboard=True)
 
-# Функция для создания кнопок в админ-панели
 def admin_panel_menu() -> ReplyKeyboardMarkup:
     return ReplyKeyboardMarkup(
         keyboard=[
@@ -38,7 +42,6 @@ def admin_panel_menu() -> ReplyKeyboardMarkup:
         ], resize_keyboard=True
     )
 
-# Проверка на админские права
 def is_admin(user_id: int) -> bool:
     return user_id in ADMINS
 
@@ -46,15 +49,13 @@ def is_admin(user_id: int) -> bool:
 async def start_handler(message: Message):
     await message.answer("👋 Привет! Добро пожаловать! Выберите нужный раздел ниже:", reply_markup=main_menu(message.from_user.id))
 
-# Обработчик для создания сделки
 @router.message(F.text == "🤝 Создать сделку")
 async def create_deal_handler(message: Message):
     user_id = message.from_user.id
     user_deals[user_id] = datetime.now()
-    cancel_kb = ReplyKeyboardMarkup(
-        keyboard=[ [KeyboardButton(text="❌ Отменить сделку")] ],
-        resize_keyboard=True
-    )
+    cancel_kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="❌ Отменить сделку", callback_data="cancel_deal")]
+    ])
     await message.answer(
         "✍️ Опишите вашу сделку.\n\nУкажите username второго участника, условия, цену и детали.",
         reply_markup=cancel_kb
@@ -62,7 +63,6 @@ async def create_deal_handler(message: Message):
     await bot.send_message(ADMIN_ID, f"📬 Новая сделка от <a href='tg://user?id={user_id}'>{user_id}</a>.")
     asyncio.create_task(auto_cancel_deal(user_id))
 
-# Обработчик для получения приза
 @router.message(F.text == "🎁 Получить приз")
 async def get_prize_handler(message: Message):
     await message.answer(
@@ -71,7 +71,6 @@ async def get_prize_handler(message: Message):
     )
     await message.answer("Свяжитесь с администратором, чтобы забрать приз: @RaindropSpam_bot")
 
-# Обработчик для кнопки "Админ-панель" (доступно только админам)
 @router.message(F.text == "🌐 Админ-панель")
 async def admin_panel_handler(message: Message):
     user_id = message.from_user.id
@@ -80,7 +79,6 @@ async def admin_panel_handler(message: Message):
     else:
         await message.answer("У вас нет доступа к админ-панели!")
 
-# Обработчик для кнопки "📋 Список сделок" в админ-панели
 @router.message(F.text == "📋 Список сделок")
 async def admin_deals_handler(message: Message):
     user_id = message.from_user.id
@@ -88,34 +86,38 @@ async def admin_deals_handler(message: Message):
         deals_list = "\n".join([f"{key}: {val}" for key, val in user_deals.items()])
         await message.answer(f"Список активных сделок:\n{deals_list}", reply_markup=admin_panel_menu())
 
-# Обработчик для кнопки "🛠 Управление админами" в админ-панели
 @router.message(F.text == "🛠 Управление админами")
-async def admin_management_handler(message: Message):
+async def admin_management_handler(message: Message, state: FSMContext):
     user_id = message.from_user.id
     if is_admin(user_id):
         await message.answer("Введите ID нового админа для добавления:", reply_markup=admin_panel_menu())
-        await AdminManagementState.add_admin.set()
+        await state.set_state(AdminManagementState.add_admin)
     else:
         await message.answer("У вас нет доступа к этой функции!")
 
-# Обработчик для добавления нового админа
-@dp.message_handler(state=AdminManagementState.add_admin)
-async def add_admin(message: Message):
+@router.message(AdminManagementState.add_admin)
+async def add_admin(message: Message, state: FSMContext):
     new_admin_id = message.text
     if new_admin_id.isdigit() and int(new_admin_id) not in ADMINS:
         ADMINS.add(int(new_admin_id))
         await message.answer(f"Пользователь {new_admin_id} был добавлен в список админов!", reply_markup=admin_panel_menu())
     else:
         await message.answer("Неверный ID или пользователь уже является админом.", reply_markup=admin_panel_menu())
+    await state.clear()
 
-# Обработчик для кнопки "🔙 Вернуться в меню" в админ-панели
 @router.message(F.text == "🔙 Вернуться в меню")
 async def back_to_menu(message: Message):
     await message.answer("Вы вернулись в главное меню", reply_markup=main_menu(message.from_user.id))
 
-# Автоотмена сделки после 1 часа бездействия
 async def auto_cancel_deal(user_id: int):
     await asyncio.sleep(3600)  # 1 час
     if user_id in user_deals:
         del user_deals[user_id]
         await bot.send_message(user_id, "❌ Ваша сделка была отменена из-за бездействия.")
+
+async def main():
+    dp.include_router(router)
+    await dp.start_polling(bot)
+
+if __name__ == "__main__":
+    asyncio.run(main())
