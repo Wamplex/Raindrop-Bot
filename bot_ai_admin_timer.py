@@ -7,7 +7,7 @@ from datetime import datetime, timedelta
 TOKEN = "7807213915:AAGGA7EDq-e_8uUnpKfg4ZhUe-KfJfXKvUY"
 ADMIN_ID = 7620745738
 
-bot = Bot(token=TOKEN)
+bot = Bot(token=7807213915:AAGGA7EDq-e_8uUnpKfg4ZhUe-KfJfXKvUY)
 dp = Dispatcher()
 router = Router()
 
