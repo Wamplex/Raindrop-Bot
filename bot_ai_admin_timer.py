@@ -7,7 +7,7 @@ from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.context import FSMContext
 from datetime import datetime, timedelta
 
-TOKEN = "7807213915:AAEkplZ9d3AXmbX6U11R2GoFPHPhLnspaus"
+TOKEN = "7807213915:AAHMhFckqpV4uKQAfdSfz5h4uxgHKWPPQjY"
 ADMIN_ID = 7620745738
 ADMINS = {ADMIN_ID}
 
