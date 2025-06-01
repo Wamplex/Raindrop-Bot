@@ -1,17 +1,19 @@
 import asyncio
 from aiogram import Bot, Dispatcher, F, Router, types
-from aiogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery, ReplyKeyboardMarkup, KeyboardButton
+from aiogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeyboardMarkup, KeyboardButton
 from aiogram.filters import CommandStart
 from aiogram.enums.parse_mode import ParseMode
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.context import FSMContext
-from datetime import datetime, timedelta
+from aiogram.client.bot import DefaultBotProperties
+from datetime import datetime
 
 TOKEN = "7807213915:AAG0p6X2sCjgEVNngfsgCHef87QVmFzUs0I"
 ADMIN_ID = 7620745738
 ADMINS = {ADMIN_ID}
 
-bot = Bot(token=TOKEN, parse_mode=ParseMode.HTML)
+# Здесь исправление: используем default=DefaultBotProperties(...)
+bot = Bot(token=TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
 dp = Dispatcher()
 router = Router()
 
@@ -89,7 +91,6 @@ async def guarantee_handler(message: Message):
 async def profile_handler(message: Message):
     user_id = message.from_user.id
     active = user_deals.get(user_id)
-    reg_date = "Неизвестно"
     await message.answer(f"👤 Ваш профиль:\n🆔 ID: {user_id}\n📝 Сделка активна: {'Да' if active else 'Нет'}")
 
 @router.message(F.text == "🌐 Админ-панель")
@@ -164,4 +165,3 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
-
